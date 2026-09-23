@@ -52,8 +52,8 @@ module aero_model
 
   !integer :: ndrydep = 0
   integer :: nwetdep = 0
-  logical :: drydep_lq(pcnst)
-  logical :: wetdep_lq(pcnst)
+  logical :: drydep_lq(pcnst) = .false.
+  logical :: wetdep_lq(pcnst) = .false.
 
   real(r8) :: aer_sol_facti(pcnst) ! in-cloud solubility factor
   real(r8) :: aer_sol_factb(pcnst) ! below-cloud solubility factor
@@ -145,6 +145,7 @@ contains
 
     ! local vars
     integer           :: m, id, ierr, ibin, ispec, ichunk, lchnk, icnst
+    integer           :: specprop_ndx, q_ndx, spec_bin_ndx
     integer           :: ind, irange
     logical           :: history_aerosol ! Output MAM or SECT aerosol tendencies
     logical           :: history_dust    ! Output dust
@@ -155,7 +156,6 @@ contains
     type(physics_buffer_desc), pointer :: phys_buffer_chunk(:)
 
     character(len=12), parameter :: subname = 'aero_model_init'
-
 
     fracis_idx      = pbuf_get_index('FRACIS')
     prain_idx       = pbuf_get_index('PRAIN')
@@ -184,6 +184,13 @@ contains
 
 ! TODO: if drydep active:
     call inidrydep(rair, gravit)
+    do specprop_ndx = 1, aero_props%nspecies_tot()
+        do spec_bin_ndx = 1,aero_props%spec_nbin(specprop_ndx)
+            q_ndx = aero_props%spec_bin_q_ndx(specprop_ndx, spec_bin_ndx)
+!            drydep_lq(q_ndx) = .true.
+!            wetdep_lq(q_ndx) = .true.
+        end do
+    end do
 
     dummy = 'RAM1'
     call addfld (dummy,horiz_only, 'A','frac','RAM1')
@@ -387,7 +394,7 @@ end function aero_model_get_state
 
     real(r8) :: vlc_dry(pcols,pver,4)     ! dep velocity ! TODO: get rid of last dimension?
     real(r8) :: vlc_grv(pcols,pver,4)     ! dep velocity
-    real(r8) ::  vlc_trb(pcols,4)          ! dep velocity
+    real(r8) :: vlc_trb(pcols,4)          ! dep velocity
     real(r8) :: aerdepdryis(pcols,pcnst)  ! aerosol dry deposition (interstitial)
     real(r8) :: massfrac(pcols, pver)
     real(r8), allocatable :: bin_centers(:)
@@ -400,6 +407,7 @@ end function aero_model_get_state
 
     real(r8) :: bin_mmr_tend(pcols, pver)
     real(r8) :: bin_mmr_tot(pcols, pver)
+    real(r8), pointer :: bin_num(:,:)                ! number concentration in #/kg
     real(r8), allocatable :: bin_num_tend(:,:,:)     ! pcols, pver, nbins
     real(r8), allocatable :: range_mmr_tend(:, :, :) ! pcols, pver, nranges
     character(len=15) :: species_tracername
@@ -437,6 +445,11 @@ end function aero_model_get_state
     aerdepdryis = 0._r8
     aerdepdrycw = 0._r8
     bin_num_tend = 0._r8
+    range_mmr_tend = 0._r8
+    sflx_range = 0._r8
+    sflx = 0._r8
+    sflx_num = 0._r8
+    sflx_range_species = 0._r8
 
 ! TODO MAKE AERDEPDRYIS and AERDEPDRYCW
 
@@ -477,6 +490,7 @@ end function aero_model_get_state
                 ! reset tmp arrays
                 bin_mmr_tend = 0._r8
                 bin_mmr_tot = 0._r8
+                bin_num => null()
 
 ! TODO: use WET radius and density in future!!
                 rad_aer(1:ncol,:) = bin_centers(ibin)
@@ -510,13 +524,13 @@ end function aero_model_get_state
                 ! calculate deposition fluxes NOTE: "dust_sediment_tend" is valid for all aerosol, not just dust
                 ! state%q has been changed to bin_mmr_tot (intent(in))
                 ! ptend%q has been changed to bin_mmr_tend(pcols, pver)
+                call master_aero_state(lchnk)%ptr%get_ambient_num(ibin, bin_num)
 
-                call dust_sediment_tend(ncol, dt, state%pint(:,:), state%pmid, state%pdel, state%t, master_aero_state(lchnk)%ptr%bin_numconc(:,:, ibin), pvmzaer, bin_num_tend(:,:, ibin), sflx_num )
+                call dust_sediment_tend(ncol, dt, state%pint(:,:), state%pmid, state%pdel, state%t, bin_num(:,:), pvmzaer, bin_num_tend(:,:, ibin), sflx_num )
                 call dust_sediment_tend(ncol, dt, state%pint(:,:), state%pmid, state%pdel, state%t, bin_mmr_tot(:,:), pvmzaer, bin_mmr_tend(:,:), sflx )
 
                 ! calculate #/kg tendency and put tendency to state
-                master_aero_state(lchnk)%ptr%bin_numconc(:ncol,:,ibin) = master_aero_state(lchnk)%ptr%bin_numconc(:ncol,:,ibin) &
-                                + bin_num_tend(:ncol,:, ibin)
+                bin_num = bin_num + bin_num_tend(:ncol,:, ibin)
 
                 dep_trb = 0._r8
                 dep_grv = 0._r8
