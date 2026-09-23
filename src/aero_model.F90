@@ -371,7 +371,7 @@ end function aero_model_get_state
     integer :: m                       ! aerosol mode index
     integer :: mm                      ! tracer index
     integer :: i
-    integer :: ibin, nbins, icol, ilev, irange, ispec, ierr
+    integer :: ibin, nbins, icol, ilev, irange, ispec, ierr, bin_ndx
 
     real(r8) :: sflx(pcols)
     real(r8) :: sflx_num(pcols)
@@ -408,8 +408,9 @@ end function aero_model_get_state
     real(r8) :: bin_mmr_tend(pcols, pver)
     real(r8) :: bin_mmr_tot(pcols, pver)
     real(r8), pointer :: bin_num(:,:)                ! number concentration in #/kg
+    real(r8), pointer :: range_mmr(:,:)              ! mass mixing ratio in kg/kg
     real(r8), allocatable :: bin_num_tend(:,:,:)     ! pcols, pver, nbins
-    real(r8), allocatable :: range_mmr_tend(:, :, :) ! pcols, pver, nranges
+    real(r8), allocatable :: range_mmr_tend(:,:,:) ! pcols, pver, nranges
     character(len=15) :: species_tracername
 
     character(len=*), parameter :: subname = 'aero_model_drydep'
@@ -562,14 +563,15 @@ end function aero_model_get_state
         do ispec = 1, aero_props%range_nspecies(irange)
             sflx_range_species = 0._r8
             species_tracername = ''
+            range_mmr => null()
 
             ! mass fraction of each species
             massfrac(:ncol,:) = master_aero_state(lchnk)%ptr%aero_range_state(irange)%massfrac(:,:,ispec)
 
             ! move tendency into aero range state
-            master_aero_state(lchnk)%ptr%aero_range_state(irange)%mmr(:ncol, :, ispec) = &
-                    master_aero_state(lchnk)%ptr%aero_range_state(irange)%mmr(:ncol, :, ispec) &
-                    + range_mmr_tend(:ncol,:,irange)*massfrac(:ncol, :)
+            bin_ndx = aero_props%range_bounds(irange, 1)
+            call master_aero_state(lchnk)%ptr%get_ambient_mmr_0list(ispec, bin_ndx, range_mmr)
+            range_mmr(:ncol,:) = range_mmr(:ncol,:) + range_mmr_tend(:ncol,:,irange)*massfrac(:ncol, :)
 
             ! use mass fractions at lowest level to get surface flux TODO: sedimentation out of higher layers?
             do icol = 1, ncol

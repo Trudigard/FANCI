@@ -37,7 +37,6 @@ module sectional_aerosol_state_mod
      integer, allocatable  :: spec_ndx(:)             ! same length as transport_ndx or third dimension of mmr(:,:,range_nspecies), indices corresponding to species properties object
      real(r8), allocatable :: dry_density(:,:)        ! density of the species mixture in a range without water, ncol, pver
      real(r8), allocatable :: hygroscopicity(:,:)     ! hygroscopicity of the species mixture
-     real(r8), pointer     :: mmr(:, :, :) => null()            ! (kg/kg) (ncol, pver, range_nspecies) interstitial, transported
      real(r8), pointer     :: mmr_cw(:, :, :) => null()         ! (kg/kg) (ncol, pver, range_nspecies) cloud borne stuff, not transported
      real(r8), allocatable :: massfrac(:,:,:)         ! mass fraction of each species
      ! ...
@@ -185,11 +184,6 @@ contains
         newobj%num_transport_ndx = 0
 
         do irange = 1, newobj%sec_aero_props%nranges()
-            allocate(newobj%aero_range_state(irange)%mmr(newobj%ncol, pver, newobj%sec_aero_props%range_nspecies(irange) ), stat=ierr)
-            if( ierr /= 0 ) then
-                nullify(newobj)
-                return
-            end if
             allocate(newobj%aero_range_state(irange)%mmr_cw(newobj%ncol, pver, newobj%sec_aero_props%range_nspecies(irange) ), stat=ierr)
             if( ierr /= 0 ) then
                 nullify(newobj)
@@ -228,7 +222,6 @@ contains
 
             newobj%aero_range_state(irange)%dry_density = 0._r8
             newobj%aero_range_state(irange)%hygroscopicity = 0._r8
-            newobj%aero_range_state(irange)%mmr = 0._r8
             newobj%aero_range_state(irange)%mmr_cw = 0._r8
             newobj%aero_range_state(irange)%massfrac = 0._r8
             newobj%aero_range_state(irange)%range_name = ''
@@ -349,12 +342,6 @@ contains
 
     character(len=*), parameter :: subname = 'set_transported'
 
-    do irange = 1, self%sec_aero_props%nranges()
-        do ispec = 1, self%sec_aero_props%range_nspecies(irange)
-            self%aero_range_state(irange)%mmr(:self%ncol,:,ispec) = self%state%q(:self%ncol,:,self%aero_range_state(irange)%transport_ndx(ispec))
-        end do
-    end do
-
     ! update the range properties
     do irange = 1, self%sec_aero_props%nranges()
         call self%update_range(irange=irange, ncol=self%ncol)
@@ -374,11 +361,7 @@ contains
 
     character(len=*), parameter :: subname = 'get_transported'
 
-    do irange = 1, self%sec_aero_props%nranges()
-        do ispec = 1, self%sec_aero_props%range_nspecies(irange)
-            self%state%q(:self%ncol,:,self%aero_range_state(irange)%transport_ndx(ispec)) = self%aero_range_state(irange)%mmr(:self%ncol,:,ispec)
-        end do
-    end do
+    return
 
   end subroutine get_transported
 
@@ -415,17 +398,14 @@ contains
     class(sectional_aerosol_state), intent(in) :: self
     integer, intent(in) :: species_ndx  ! species index
     integer, intent(in) :: bin_ndx      ! bin index
-    real(r8), pointer   :: mmr(:,:)       ! mass mixing ratios (ncol,nlev)
+    real(r8), pointer   :: mmr(:,:)     ! mass mixing ratios (ncol,nlev)
     integer             :: range
 
     character(len=*), parameter :: subname = 'get_ambient_mmr_0list'
 
     range = self%sec_aero_props%bins2ranges(bin_ndx)
-    mmr => self%aero_range_state(range)%mmr(:,:,species_ndx)
-! TODO: point to state%q instead of aero_range_state%mmr
-    ! sth like self%state%q(:self%ncol,:,self%aero_range_state(range)%transport_ndx(species_ndx))
-    ! instead of self%aero_range_state(range)%mmr()
-! TODO: same for number concentration
+    mmr => self%state%q(:self%ncol,:,self%aero_range_state(range)%transport_ndx(species_ndx))
+
   end subroutine get_ambient_mmr_0list
 
   !------------------------------------------------------------------------------
@@ -813,7 +793,9 @@ contains
     ! update mmr of each component if mmr tendency has been passed as an argument
     ! else: update other state variables with mmr from before
     if ( present(mmr_tend) ) then
-        self%aero_range_state(irange)%mmr = self%aero_range_state(irange)%mmr + mmr_tend(:,:,:)
+        self%state%q(:ncol,:pver, self%aero_range_state(irange)%transport_ndx(:)) = &
+        self%state%q(:ncol,:pver, self%aero_range_state(irange)%transport_ndx(:)) + mmr_tend(:,:,:)
+! TODO: fix this, use ptend!!?
     end if
     ! reset density and hygroscopicity
     self%aero_range_state(irange)%dry_density = 0._r8
@@ -821,12 +803,13 @@ contains
     range_total_mmr = 0._r8
     self%aero_range_state(irange)%massfrac = 0._r8
 
-    range_total_mmr = sum(self%aero_range_state(irange)%mmr, dim=3) ! sum over species (kg/kg)
+    range_total_mmr = sum(self%state%q(:ncol,:pver, self%aero_range_state(irange)%transport_ndx(:)), dim=3) ! sum over species (kg/kg)
 
     ! calculate mass fractions
     do ispec = 1, self%sec_aero_props%range_nspecies(irange)
         where ( range_total_mmr /= 0._r8 )
-            self%aero_range_state(irange)%massfrac(:,:,ispec) = self%aero_range_state(irange)%mmr(:,:,ispec) / range_total_mmr
+            self%aero_range_state(irange)%massfrac(:,:,ispec) = self% state%q(:ncol,:pver, self%aero_range_state(irange)%transport_ndx(ispec)) &
+                                                                 / range_total_mmr
         end where
     end do
 
@@ -848,7 +831,8 @@ contains
 ! TODO: source, total hygroscopicity parameter kappa_tot = SUM_OVER_ALL_SPECIES(volume_i/volume_tot * kappa_i)
             where(range_dry_volume /= 0._r8)
             self%aero_range_state(irange)%hygroscopicity = self%aero_range_state(irange)%hygroscopicity &
-                + self%aero_range_state(irange)%mmr(:,:,ispec) / range_dry_volume / &
+                + self% state%q(:ncol,:pver, self%aero_range_state(irange)%transport_ndx(ispec)) &
+                / range_dry_volume / &
                 self%sec_aero_props%density(ispecprop) * self%sec_aero_props%kappa(ispecprop) ! TODO: probably not the least ugly way to do this
             end where
         end do
