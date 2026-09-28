@@ -18,8 +18,8 @@ Setup guide. It covers **two** repos:
 ## 1. Fork on GitHub
 Fork both repositories:
 - **Host model:** fork  upstream (recommended)
-  [`NorESMhub/CAM`](https://github.com/NorESMhub/CAM.git)  or christinas fork [`Trudigard/CAM`](https://github.com/Trudigard/CAM.git)  → `github.com/<GITHUB_USER>/CAM`
-- **Aerosol code:** fork [`Trudigard/OsloSectional`](https://github.com/Trudigard/OsloSectional.git) → `github.com/<GITHUB_USER>/OsloSectional`
+  [`NorESMhub/CAM`](https://github.com/NorESMhub/CAM.git)  OR christinas fork [`Trudigard/CAM`](https://githhttps://github.com/Trudigard/OsloSectional/blob/saltydust/SETUP.mdub.com/Trudigard/CAM.git)  → `github.com/<GITHUB_USER>/CAM`
+- **Aerosol code:** fork [NorESMHub/OsloSectional](https://github.com/NorESMhub/OsloSectional)(recommended) OR christinas fork [`Trudigard/OsloSectional`](https://github.com/Trudigard/OsloSectional.git) → `github.com/<GITHUB_USER>/OsloSectional`
 
 ## 2. Clone the host model on Olivia
 
