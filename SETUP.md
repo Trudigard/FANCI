@@ -42,7 +42,21 @@ git checkout -b <your_branch_name> christinafork/saltydust
 > `christinafork/saltydust` directly leaves you in **detached HEAD**, where commits are easy to lose.
 
 ## 4. Pull in the external components
-[FIRST DO THIS STEP!]( https://github.com/NorESMhub/noresm3_dev_simulations/wiki/Running-NorESM-on-Olivia)
+[From here]( https://github.com/NorESMhub/noresm3_dev_simulations/wiki/Running-NorESM-on-Olivia)
+First
+```bash
+module purge
+module load NRIS/Login
+module load Python/3.12.3-GCCcore-13.3.0
+module save mod_noresm
+```
+then next time
+```bash
+module r mod_noresm
+
+```
+
+
 ```bash
 ./bin/git-fleximod update
 ```
