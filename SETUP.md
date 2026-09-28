@@ -91,7 +91,7 @@ From the `CAM_SEC` root:
 ```
 
 To run a **single** test instead of the whole category, name it explicitly, e.g.:
-
+(COMPSET='SecDust')
 ```bash
 ./cime/scripts/create_test SMS_Ln9.ne16pg3_ne16pg3_mtn14.<COMPSET>.olivia_intel \
   -r /cluster/work/projects/nn9560k/$USER/ -p NN9560K \
