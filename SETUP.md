@@ -55,7 +55,7 @@ then next time
 module r mod_noresm
 
 ```
-
+Then run: 
 
 ```bash
 ./bin/git-fleximod update
