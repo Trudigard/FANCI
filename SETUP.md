@@ -73,7 +73,7 @@ cd src/chemistry/oslo_sectional
 git remote set-url origin https://github.com/<GITHUB_USER>/OsloSectional.git
 git remote add christinafork https://github.com/Trudigard/OsloSectional.git
 git fetch christinafork origin
-git checkout -b wetdep_dev christinafork/saltydust
+git checkout -b <your_branch_name> christinafork/saltydust
 cd -
 ```
 
