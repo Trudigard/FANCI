@@ -201,6 +201,7 @@ contains
           call endrun(subrname//' : construction of aero_props sectional_aerosol_properties object failed')
        end if
        if (convproc_do_aer) then
+   !     convproc_do_aer = .False.
            call endrun(subrname// &
                    ' : convproc_do_aer=.true. is not supported for the oslo_sectional scheme '// &
                    '(aero_convproc assumes per-bin mass indexing; sectional carries mass per range). '// &
@@ -1071,7 +1072,7 @@ if (masterproc) then
       ag0 = dg0/2._r8
       sx = logsig
       xg0 = log( ag0 )
-      if (aero_props_obj%model_is('oslo_sectional')) then
+      if (aero_props%model_is('oslo_sectional')) then
           na=1
       else
 
@@ -1156,7 +1157,7 @@ if (masterproc) then
       anumsum = 0._r8
       avolsum = 0._r8
       do i = 1, na
-          if (aero_props_obj%model_is('oslo_sectional')) then
+          if (aero_props%model_is('oslo_sectional')) then
 
               ! Assume just one mean value and one bin:
               a = ag0 ! radius of bin center.

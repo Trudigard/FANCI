@@ -26,6 +26,7 @@ module sectional_aerosol_state_mod
 
 
   integer, allocatable :: nr_copies(:) ! internal count of state object copies
+  real(r8), parameter   :: dryvol_min = 1e-26_r8   ! m3_aer/kg_air; range_dry_volume at/below this => no aerosol
 
   type aero_state_ptr
     type(sectional_aerosol_state), pointer :: ptr => null()
@@ -40,7 +41,6 @@ module sectional_aerosol_state_mod
      real(r8), pointer     :: mmr(:, :, :) => null()            ! (kg/kg) (ncol, pver, range_nspecies) interstitial, transported
      real(r8), pointer     :: mmr_cw(:, :, :) => null()         ! (kg/kg) (ncol, pver, range_nspecies) cloud borne stuff, not transported
      real(r8), allocatable :: massfrac(:,:,:)         ! mass fraction of each species
-     real(r8), parameter   :: dryvol_min = 1e-26_r8   ! m3_aer/kg_air; range_dry_volume at/below this => no aerosol
      ! ...
 
   end type aerosol_range_state
@@ -119,6 +119,7 @@ contains
     character(len=:), allocatable :: num_name
     character(len=10)             :: speciesname, speciesname_props
     logical :: solsym_found
+    integer :: icol, iver
     character(len=*), parameter :: subname = 'constructor'
 
     make_copy = .false.
@@ -179,8 +180,13 @@ contains
         end if
         ! temporary fix: no hygroscopic growth yet -> wet size = dry size.
         ! use bin_centers, alread in m
-        newobj%wet_radius(:,:,ibin) = newobj%sec_aero_props%bin_centers(newobj%sec_aero_props%nbins())
-        newobj%qaerwat = 0._r8
+        ! TODO: use real wet radius!
+        do icol = 1, newobj%ncol
+            do iver = 1, pver
+                newobj%wet_radius(icol, iver,:) = newobj%sec_aero_props%bin_centers(newobj%sec_aero_props%nbins())
+            end do
+        end do
+        newobj%qaerwat(:, :,:) = 0._r8
 
         allocate(newobj%aero_range_state(newobj%sec_aero_props%nranges()), stat=ierr)
         if( ierr /= 0 ) then
@@ -871,7 +877,7 @@ contains
     end do
 
     !where (range_dry_volume /= 0._r8)
-    where (range_dry_volume > self%aero_range_state(irange)%dryvol_min)
+    where (range_dry_volume > dryvol_min)
         self%aero_range_state(irange)%dry_density = range_total_mmr / range_dry_volume
     elsewhere
         self%aero_range_state(irange)%dry_density = rho_aer_fallback  ! fall back value, set at top.
@@ -882,7 +888,7 @@ contains
             ispecprop = self%aero_range_state(irange)%spec_ndx(ispec)
 ! TODO: source, total hygroscopicity parameter kappa_tot = SUM_OVER_ALL_SPECIES(volume_i/volume_tot * kappa_i)
             !where(range_dry_volume /= 0._r8)
-            where (range_dry_volume > self%aero_range_state(irange)%dryvol_min)
+            where (range_dry_volume > dryvol_min)
 
                 ! volume weighted avg kappa for range:
                 self%aero_range_state(irange)%hygroscopicity = self%aero_range_state(irange)%hygroscopicity &
