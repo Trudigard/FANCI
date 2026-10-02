@@ -82,7 +82,7 @@ contains
 
     ! Local variables
     integer                     :: unitn, ierr, ind, pos
-    character(len=50)           :: tmp                                                                                                           
+    character(len=50)           :: tmp
 
     character(len=*), parameter :: subname = 'aero_model_readnl'
 
@@ -104,7 +104,7 @@ contains
     ! TODO: initialize gasaerexch
 
   end subroutine aero_model_readnl
-                                
+
   !=============================================================================
   !=============================================================================
   subroutine aero_model_register()
@@ -470,7 +470,6 @@ end function aero_model_get_state
     end do
 
     irange = 1
-    !state(lchnk)%ptr%aero_range_state(3)%mmr(1, pver,1)
     do ibin = 1, nbins  ! main loop over aerosol size bins aero
         irange = aero_props%bins2ranges(ibin)
 
@@ -611,58 +610,58 @@ end function aero_model_get_state
 
   end subroutine aero_model_wetdep
 !           use wetdep,        only : wetdepa_v1, wetdep_inputs_set, wetdep_inputs_t
-!       
+!
 !           ! args
-!       
+!
 !           type(physics_state), intent(in)    :: state       ! Physics state variables
 !           real(r8),            intent(in)    :: dt          ! time step
 !           real(r8),            intent(in)    :: dlf(:,:)    ! shallow+deep convective detrainment [kg/kg/s]
 !           type(cam_out_t),     intent(inout) :: cam_out     ! export state
 !           type(physics_ptend), intent(out)   :: ptend       ! indivdual parameterization tendencies
 !           type(physics_buffer_desc), pointer :: pbuf(:)
-!       
+!
 !           ! local vars
-!       
+!
 !           integer  :: ncol                     ! number of atmospheric columns
 !           integer  :: lchnk                    ! chunk identifier
 !           integer  :: m,mm, i,k
-!       
+!
 !           real(r8) :: sflx_tot_dst(pcols)
 !           real(r8) :: sflx_tot_slt(pcols)
-!       
+!
 !           real(r8) :: iscavt(pcols, pver)
 !           real(r8) :: scavt(pcols, pver)
 !           real(r8) :: scavcoef(pcols,pver)     ! Dana and Hales coefficient (/mm) (0.1)
 !           real(r8) :: sflx(pcols)              ! deposition flux
-!       
+!
 !           real(r8) :: icscavt(pcols, pver)
 !           real(r8) :: isscavt(pcols, pver)
 !           real(r8) :: bcscavt(pcols, pver)
 !           real(r8) :: bsscavt(pcols, pver)
-!       
+!
 !           real(r8) :: sol_factb, sol_facti
-!       
+!
 !           real(r8) :: rainmr(pcols,pver)       ! mixing ratio of rain within cloud volume
 !           real(r8) :: cldv(pcols,pver)         ! cloudy volume undergoing scavenging
 !           real(r8) :: cldvcu(pcols,pver)       ! Convective precipitation area at the top interface of current layer
 !           real(r8) :: cldvst(pcols,pver)       ! Stratiform precipitation area at the top interface of current layer
-!       
+!
 !           real(r8), pointer :: fracis(:,:,:)   ! fraction of transported species that are insoluble
-!       
+!
 !           type(wetdep_inputs_t) :: dep_inputs  ! obj that contains inputs to wetdepa routine
-!       
+!
 !           character(len=*), parameter :: subname = 'aero_model_wetdep'
-!       
+!
 !           call pbuf_get_field(pbuf, fracis_idx, fracis, start=(/1,1,1/), kount=(/pcols, pver, pcnst/) )
-!       
+!
 !           call physics_ptend_init(ptend, state%psetcols, 'aero_model_wetdep', lq=wetdep_lq)
-!       
+!
 !       if (nwetdep<1) return
-!       
+!
 !       call endrun(subname//":: is not yet implemented")
-!       
+!
 !         endsubroutine aero_model_wetdep
-!       
+!
   !-------------------------------------------------------------------------
   ! provides aerosol surface area info for sectional aerosols
   ! called from mo_usrrxt

@@ -1071,7 +1071,7 @@ if (masterproc) then
       ag0 = dg0/2._r8
       sx = logsig
       xg0 = log( ag0 )
-      if (sx<=0._r8) then
+      if (aero_props_obj%model_is('oslo_sectional')) then
           na=1
       else
 
@@ -1156,7 +1156,8 @@ if (masterproc) then
       anumsum = 0._r8
       avolsum = 0._r8
       do i = 1, na
-          if (sx <=0._r8) then
+          if (aero_props_obj%model_is('oslo_sectional')) then
+
               ! Assume just one mean value and one bin:
               a = ag0 ! radius of bin center.
               ynumaerosv(i) = 1._r8 !all in one

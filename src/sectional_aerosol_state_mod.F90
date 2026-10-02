@@ -38,10 +38,9 @@ module sectional_aerosol_state_mod
      real(r8), allocatable :: dry_density(:,:)        ! density of the species mixture in a range without water, ncol, pver
      real(r8), allocatable :: hygroscopicity(:,:)     ! hygroscopicity of the species mixture
      real(r8), pointer     :: mmr(:, :, :) => null()            ! (kg/kg) (ncol, pver, range_nspecies) interstitial, transported
-     real(r8), allocatable :: mmr_ref(:, :, :)        ! mmr as of the last set_transported call (ncol,pver,range_nspecies)
      real(r8), pointer     :: mmr_cw(:, :, :) => null()         ! (kg/kg) (ncol, pver, range_nspecies) cloud borne stuff, not transported
      real(r8), allocatable :: massfrac(:,:,:)         ! mass fraction of each species
-     real(r8)              :: dryvol_min = 0._r8   ! m3_aer/kg_air; range_dry_volume at/below this => no aerosol
+     real(r8), parameter   :: dryvol_min = 1e-26_r8   ! m3_aer/kg_air; range_dry_volume at/below this => no aerosol
      ! ...
 
   end type aerosol_range_state
@@ -53,7 +52,6 @@ module sectional_aerosol_state_mod
      type(physics_buffer_desc), pointer :: pbuf(:) => null()
      type(sectional_aerosol_properties), pointer :: sec_aero_props => null()
      real(r8), pointer :: bin_numconc(:,:,:) => null()          ! #/kg
-     real(r8), allocatable :: bin_numconc_ref(:,:,:)                ! bin_numconc as of the last set_transported call
      real(r8), pointer :: bin_numconc_cw(:,:,:) => null()
      real(r8), pointer :: wet_radius(:,:,:) => null()           ! wet radius at bin center -> wet_radius*2 = dgnumwet
      real(r8), pointer :: qaerwat(:,:,:) => null()              ! aerosol water concentration (g/g)
@@ -161,11 +159,6 @@ contains
             nullify(newobj)
             return
         end if
-        allocate(newobj%bin_numconc_ref(newobj%ncol, pver, newobj%sec_aero_props%nbins()), stat=ierr)
-        if( ierr /= 0 ) then
-            nullify(newobj)
-            return
-        end if
 
         allocate(newobj%bin_numconc_cw(newobj%ncol, pver, newobj%sec_aero_props%nbins()), stat=ierr)
         if( ierr /= 0 ) then
@@ -185,10 +178,8 @@ contains
             return
         end if
         ! temporary fix: no hygroscopic growth yet -> wet size = dry size.
-        ! scav_diam is the dry centre DIAMETER in cm; convert to radius in m.
-        do ibin = 1, newobj%sec_aero_props%nbins()
-            newobj%wet_radius(:,:,ibin) = 0.5_r8 * newobj%sec_aero_props%scav_diam(ibin) * 1.0e-2_r8
-        end do
+        ! use bin_centers, alread in m
+        newobj%wet_radius(:,:,ibin) = newobj%sec_aero_props%bin_centers(newobj%sec_aero_props%nbins())
         newobj%qaerwat = 0._r8
 
         allocate(newobj%aero_range_state(newobj%sec_aero_props%nranges()), stat=ierr)
@@ -204,17 +195,11 @@ contains
         end if
 
         newobj%bin_numconc = 0._r8
-        newobj%bin_numconc_ref = 0._r8
         newobj%bin_numconc_cw = 0._r8
         newobj%num_transport_ndx = 0
 
         do irange = 1, newobj%sec_aero_props%nranges()
             allocate(newobj%aero_range_state(irange)%mmr(newobj%ncol, pver, newobj%sec_aero_props%range_nspecies(irange) ), stat=ierr)
-            if( ierr /= 0 ) then
-                nullify(newobj)
-                return
-            end if
-            allocate(newobj%aero_range_state(irange)%mmr_ref(newobj%ncol, pver, newobj%sec_aero_props%range_nspecies(irange) ), stat=ierr)
             if( ierr /= 0 ) then
                 nullify(newobj)
                 return
@@ -258,7 +243,6 @@ contains
             newobj%aero_range_state(irange)%dry_density = 0._r8
             newobj%aero_range_state(irange)%hygroscopicity = 0._r8
             newobj%aero_range_state(irange)%mmr = 0._r8
-            newobj%aero_range_state(irange)%mmr_ref = 0._r8
             newobj%aero_range_state(irange)%mmr_cw = 0._r8
             newobj%aero_range_state(irange)%massfrac = 0._r8
             newobj%aero_range_state(irange)%range_name = ''
@@ -317,20 +301,7 @@ contains
                 call endrun(subname//" :: ERROR: transport array index for "//trim(num_name)//' not found')
             end if
         end do
-        ! per-range dry-volume floor: Sum over the range's bins of (number qmin) x (particle volume).
-        ! range_dry_volume at or below this means every bin is at its constituent minimum (no aerosol),
-        ! so dry_density is undefined and must not be computed. 100x margin above the pure floor.
-        do irange = 1, newobj%sec_aero_props%nranges()
-            newobj%aero_range_state(irange)%dryvol_min = 0._r8
-            do ibin = newobj%sec_aero_props%range_bounds(irange, 1), newobj%sec_aero_props%range_bounds(irange, 2)
-                newobj%aero_range_state(irange)%dryvol_min =                          &
-                            newobj%aero_range_state(irange)%dryvol_min +              &
-                            qmin(newobj%num_transport_ndx(ibin)) *                    &
-                            newobj%sec_aero_props%particle_volume(ibin)
-            end do
-            newobj%aero_range_state(irange)%dryvol_min =                      &
-                    100._r8 * newobj%aero_range_state(irange)%dryvol_min
-        end do
+
 
         if (.not. associated(master_aero_state(lchnk)%ptr)) then
             master_aero_state(lchnk)%ptr => newobj
@@ -399,13 +370,11 @@ contains
         do ispec = 1, self%sec_aero_props%range_nspecies(irange)
             self%aero_range_state(irange)%mmr(:self%ncol,:,ispec) = self%state%q(:self%ncol,:,self%aero_range_state(irange)%transport_ndx(ispec))
         end do
-        self%aero_range_state(irange)%mmr_ref(:self%ncol,:,:) = self%aero_range_state(irange)%mmr(:self%ncol,:,:)
     end do
 
     do ibin = 1, self%sec_aero_props%nbins()
         self%bin_numconc(:,:,ibin) = self%state%q(:self%ncol,:,self%num_transport_ndx(ibin))
     end do
-    self%bin_numconc_ref(:self%ncol,:,:) = self%bin_numconc(:self%ncol,:,:)
     ! update the range properties
     do irange = 1, self%sec_aero_props%nranges()
         call self%update_range(irange=irange, ncol=self%ncol)
@@ -432,20 +401,13 @@ contains
 
     do irange = 1, self%sec_aero_props%nranges()
         do ispec = 1, self%sec_aero_props%range_nspecies(irange)
-            !self%state%q(:self%ncol,:,self%aero_range_state(irange)%transport_ndx(ispec)) = self%aero_range_state(irange)%mmr(:self%ncol,:,ispec)
-            self%state%q(:self%ncol,:,self%aero_range_state(irange)%transport_ndx(ispec)) = &
-                    self%state%q(:self%ncol,:,self%aero_range_state(irange)%transport_ndx(ispec)) &
-                            + ( self%aero_range_state(irange)%mmr(:self%ncol,:,ispec) &
-                            - self%aero_range_state(irange)%mmr_ref(:self%ncol,:,ispec) )
-
+            self%state%q(:self%ncol,:,self%aero_range_state(irange)%transport_ndx(ispec)) = self%aero_range_state(irange)%mmr(:self%ncol,:,ispec)
         end do
     end do
     do ibin = 1, self%sec_aero_props%nbins()
 
-        !self%state%q(:self%ncol,:,self%num_transport_ndx(ibin)) = self%bin_numconc(:self%ncol,:,ibin)
-        self%state%q(:self%ncol,:,self%num_transport_ndx(ibin)) = &
-                self%state%q(:self%ncol,:,self%num_transport_ndx(ibin)) &
-                        + ( self%bin_numconc(:self%ncol,:,ibin) - self%bin_numconc_ref(:self%ncol,:,ibin) )
+        self%state%q(:self%ncol,:,self%num_transport_ndx(ibin)) = self%bin_numconc(:self%ncol,:,ibin)
+
     end do
 
   end subroutine get_transported
@@ -842,7 +804,6 @@ contains
     ! fixed (and high) supersaturation? Maybe expensive?
 
     frac=0.8
-    !call endrun(subname//' is not yet implemented')
 
   end function convcld_actfrac
 
@@ -893,7 +854,6 @@ contains
     ! reset density and hygroscopicity
     self%aero_range_state(irange)%dry_density = 0._r8
     self%aero_range_state(irange)%hygroscopicity = 0._r8
-    !range_total_mmr = 0._r8
     self%aero_range_state(irange)%massfrac = 0._r8
 
     range_total_mmr = sum(self%aero_range_state(irange)%mmr, dim=3) ! sum over species (kg/kg)

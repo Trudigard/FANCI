@@ -1021,7 +1021,7 @@ end if
     integer, intent(in) :: bin_ndx           ! bin number
     integer, intent(in) :: species_ndx       ! species number
     character(len=*), intent(out) :: spectype ! species type
-    !character(len=*), parameter :: subname = 'species_type'
+    character(len=*), parameter :: subname = 'species_type'
 
     call self%get(bin_ndx, species_ndx, spectype=spectype)
 
