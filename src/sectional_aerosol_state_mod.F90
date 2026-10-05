@@ -14,7 +14,7 @@ module sectional_aerosol_state_mod
   use ppgrid,         only: pver, pcols
   use string_utils,   only: int2str
   use ppgrid,         only: begchunk, endchunk
-
+  use constituents, only: cnst_get_ind, qmin
   use physics_buffer, only: physics_buffer_desc, pbuf_get_field, pbuf_get_index
 
   implicit none
@@ -26,6 +26,7 @@ module sectional_aerosol_state_mod
 
 
   integer, allocatable :: nr_copies(:) ! internal count of state object copies
+  real(r8), parameter   :: dryvol_min = 1e-26_r8   ! m3_aer/kg_air; range_dry_volume at/below this => no aerosol
 
   type aero_state_ptr
     type(sectional_aerosol_state), pointer :: ptr => null()
@@ -92,6 +93,7 @@ module sectional_aerosol_state_mod
      procedure :: constructor
   end interface sectional_aerosol_state
 
+  real(r8), parameter :: rho_aer_fallback = 1000._r8   ! kg/m3; only used where a range holds no aerosol
   real(r8), parameter :: rh2odens = 1._r8/rhoh2o
   type(aero_state_ptr), allocatable :: master_aero_state(:)
 
@@ -115,6 +117,7 @@ contains
     character(len=:), allocatable :: num_name
     character(len=10)             :: speciesname, speciesname_props
     logical :: solsym_found
+    integer :: icol, iver
     character(len=*), parameter :: subname = 'constructor'
 
     make_copy = .false.
@@ -167,6 +170,15 @@ contains
             nullify(newobj)
             return
         end if
+        ! temporary fix: no hygroscopic growth yet -> wet size = dry size.
+        ! use bin_centers, alread in m
+        ! TODO: use real wet radius!
+        do icol = 1, newobj%ncol
+            do iver = 1, pver
+                newobj%wet_radius(icol, iver,:) = newobj%sec_aero_props%bin_centers(newobj%sec_aero_props%nbins())
+            end do
+        end do
+        newobj%qaerwat(:, :,:) = 0._r8
 
         allocate(newobj%aero_range_state(newobj%sec_aero_props%nranges()), stat=ierr)
         if( ierr /= 0 ) then
@@ -280,6 +292,8 @@ contains
                 call endrun(subname//" :: ERROR: transport array index for "//trim(num_name)//' not found')
             end if
         end do
+
+
         if (.not. associated(master_aero_state(lchnk)%ptr)) then
             master_aero_state(lchnk)%ptr => newobj
             if (nr_copies(lchnk) > 2) then
@@ -346,7 +360,12 @@ contains
     do irange = 1, self%sec_aero_props%nranges()
         call self%update_range(irange=irange, ncol=self%ncol)
     end do
-
+    ! TODO add something like:
+    !do ibin=1, self%sec_aero_props%nbins()
+    !   call self%water_uptake(self%sec_aero_props, 0, ibin, self%ncol, pver, gnumwet, qaerwat)
+    !   self%wet_radius(:,:,ibin) = 0.5_r8 * dgnumwet
+    !   self%qaerwat(:,:,ibin)    = qaerwat
+    ! end do
   end subroutine set_transported
 
   !------------------------------------------------------------------------------
@@ -728,8 +747,7 @@ contains
 
     character(len=*), parameter :: subname = 'wet_diameter'
 
-    diam = 2._r8 * self%wet_radius(ncol, nlev, bin_ndx)
-
+    diam(:ncol,:nlev) = 2._r8 * self%wet_radius(:ncol, :nlev, bin_ndx)
   end function wet_diameter
 
   !------------------------------------------------------------------------------
@@ -747,7 +765,11 @@ contains
 
     character(len=*), parameter :: subname = 'convcld_actfrac'
 
-    call endrun(subname//' is not yet implemented')
+    !TODO make these into namelist options and make it more nuanced...
+    ! Ideally we would make a fraction per range maybe? Or I don't see why it could not call the activation code for a
+    ! fixed (and high) supersaturation? Maybe expensive?
+
+    frac=0.8
 
   end function convcld_actfrac
 
@@ -800,7 +822,6 @@ contains
     ! reset density and hygroscopicity
     self%aero_range_state(irange)%dry_density = 0._r8
     self%aero_range_state(irange)%hygroscopicity = 0._r8
-    range_total_mmr = 0._r8
     self%aero_range_state(irange)%massfrac = 0._r8
 
     range_total_mmr = sum(self%state%q(:ncol,:pver, self%aero_range_state(irange)%transport_ndx(:)), dim=3) ! sum over species (kg/kg)
@@ -818,22 +839,22 @@ contains
         range_dry_volume = range_dry_volume + self%dry_volume(self%sec_aero_props, 1, ibin, self%state%ncol, pver) !TODO: change input parameters
     end do
 
-    where (range_dry_volume /= 0._r8)
+    !where (range_dry_volume /= 0._r8)
+    where (range_dry_volume > dryvol_min)
         self%aero_range_state(irange)%dry_density = range_total_mmr / range_dry_volume
     elsewhere
-        self%aero_range_state(irange)%dry_density = 0._r8  ! or some safe default
+        self%aero_range_state(irange)%dry_density = rho_aer_fallback  ! fall back value, set at top.
     end where
-
     !self%aero_range_state(irange)%dry_density = range_total_mmr/range_dry_volume
     if ( self%sec_aero_props%range_nspecies(irange) /= 0 ) then
         do ispec = 1,self%sec_aero_props%range_nspecies(irange)
             ispecprop = self%aero_range_state(irange)%spec_ndx(ispec)
 ! TODO: source, total hygroscopicity parameter kappa_tot = SUM_OVER_ALL_SPECIES(volume_i/volume_tot * kappa_i)
-            where(range_dry_volume /= 0._r8)
+            where(range_dry_volume /= dryvol_min)
             self%aero_range_state(irange)%hygroscopicity = self%aero_range_state(irange)%hygroscopicity &
-                + self% state%q(:ncol,:pver, self%aero_range_state(irange)%transport_ndx(ispec)) &
-                / range_dry_volume / &
-                self%sec_aero_props%density(ispecprop) * self%sec_aero_props%kappa(ispecprop) ! TODO: probably not the least ugly way to do this
+                + self%state%q(:ncol,:pver, self%aero_range_state(irange)%transport_ndx(ispec)) &
+                / self%sec_aero_props%density(ispecprop) &
+                / range_dry_volume * self%sec_aero_props%kappa(ispecprop) ! TODO: probably not the least ugly way to do this
             end where
         end do
     end if

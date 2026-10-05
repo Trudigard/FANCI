@@ -516,7 +516,6 @@ end function aero_model_get_state
                         bin_mmr_tot(icol, ilev) = master_aero_state(lchnk)%ptr%ambient_total_bin_mmr(aero_props, ibin, icol, ilev)
                     end do
                 end do
-
                 ! convert velocity to Pa/s
                 pvmzaer(:ncol,1)=0._r8
                 pvmzaer(:ncol,2:pverp) = vlc_dry(:ncol,:,jvlc)
@@ -529,7 +528,6 @@ end function aero_model_get_state
 
                 call dust_sediment_tend(ncol, dt, state%pint(:,:), state%pmid, state%pdel, state%t, bin_num(:,:), pvmzaer, bin_num_tend(:,:, ibin), sflx_num )
                 call dust_sediment_tend(ncol, dt, state%pint(:,:), state%pmid, state%pdel, state%t, bin_mmr_tot(:,:), pvmzaer, bin_mmr_tend(:,:), sflx )
-
                 ! calculate #/kg tendency and put tendency to state
                 bin_num = bin_num + bin_num_tend(:ncol,:, ibin)
 
@@ -552,12 +550,10 @@ end function aero_model_get_state
           !      write(6,*)"DEBUG: maxval for number: ", maxval(aerdepdryis(:ncol,mm))
             end if
         end do
-
         ! add up mass in a range
         range_mmr_tend(:ncol,:,irange) = range_mmr_tend(:ncol,:,irange) + bin_mmr_tend(:ncol,:)
         sflx_range(:,irange) = sflx_range(:,irange) + sflx
     end do
-
         ! calculate the tendency for each species/range
     do irange = 1, aero_props%nranges()
         do ispec = 1, aero_props%range_nspecies(irange)
@@ -611,60 +607,77 @@ end function aero_model_get_state
   !=============================================================================
   !=============================================================================
   subroutine aero_model_wetdep( state, dt, dlf, cam_out, ptend, pbuf)
+      use aero_wetdep_cam, only: aero_wetdep_tend
 
-    use wetdep,        only : wetdepa_v1, wetdep_inputs_set, wetdep_inputs_t
+      ! args
 
-    ! args
+      type(physics_state), intent(in)    :: state       ! Physics state variables
+      real(r8),            intent(in)    :: dt          ! time step
+      real(r8),            intent(in)    :: dlf(:,:)    ! shallow+deep convective detrainment [kg/kg/s]
+      type(cam_out_t),     intent(inout) :: cam_out     ! export state
+      type(physics_ptend), intent(out)   :: ptend       ! indivdual parameterization tendencies
+      type(physics_buffer_desc), pointer :: pbuf(:)
+                 integer  :: lchnk                    ! chunk identifier
+      lchnk = state%lchnk
 
-    type(physics_state), intent(in)    :: state       ! Physics state variables
-    real(r8),            intent(in)    :: dt          ! time step
-    real(r8),            intent(in)    :: dlf(:,:)    ! shallow+deep convective detrainment [kg/kg/s]
-    type(cam_out_t),     intent(inout) :: cam_out     ! export state
-    type(physics_ptend), intent(out)   :: ptend       ! indivdual parameterization tendencies
-    type(physics_buffer_desc), pointer :: pbuf(:)
+      ! smb: TODO REMOVE THIS.
+      !if (nwetdep<1) return
+      call aero_wetdep_tend(state, dt, dlf, cam_out, ptend, pbuf)
 
-    ! local vars
-
-    integer  :: ncol                     ! number of atmospheric columns
-    integer  :: lchnk                    ! chunk identifier
-    integer  :: m,mm, i,k
-
-    real(r8) :: sflx_tot_dst(pcols)
-    real(r8) :: sflx_tot_slt(pcols)
-
-    real(r8) :: iscavt(pcols, pver)
-    real(r8) :: scavt(pcols, pver)
-    real(r8) :: scavcoef(pcols,pver)     ! Dana and Hales coefficient (/mm) (0.1)
-    real(r8) :: sflx(pcols)              ! deposition flux
-
-    real(r8) :: icscavt(pcols, pver)
-    real(r8) :: isscavt(pcols, pver)
-    real(r8) :: bcscavt(pcols, pver)
-    real(r8) :: bsscavt(pcols, pver)
-
-    real(r8) :: sol_factb, sol_facti
-
-    real(r8) :: rainmr(pcols,pver)       ! mixing ratio of rain within cloud volume
-    real(r8) :: cldv(pcols,pver)         ! cloudy volume undergoing scavenging
-    real(r8) :: cldvcu(pcols,pver)       ! Convective precipitation area at the top interface of current layer
-    real(r8) :: cldvst(pcols,pver)       ! Stratiform precipitation area at the top interface of current layer
-
-    real(r8), pointer :: fracis(:,:,:)   ! fraction of transported species that are insoluble
-
-    type(wetdep_inputs_t) :: dep_inputs  ! obj that contains inputs to wetdepa routine
-
-    character(len=*), parameter :: subname = 'aero_model_wetdep'
-
-    call pbuf_get_field(pbuf, fracis_idx, fracis, start=(/1,1,1/), kount=(/pcols, pver, pcnst/) )
-
-    call physics_ptend_init(ptend, state%psetcols, 'aero_model_wetdep', lq=wetdep_lq)
-
-if (nwetdep<1) return
-
-call endrun(subname//":: is not yet implemented")
-
-  endsubroutine aero_model_wetdep
-
+  end subroutine aero_model_wetdep
+!           use wetdep,        only : wetdepa_v1, wetdep_inputs_set, wetdep_inputs_t
+!
+!           ! args
+!
+!           type(physics_state), intent(in)    :: state       ! Physics state variables
+!           real(r8),            intent(in)    :: dt          ! time step
+!           real(r8),            intent(in)    :: dlf(:,:)    ! shallow+deep convective detrainment [kg/kg/s]
+!           type(cam_out_t),     intent(inout) :: cam_out     ! export state
+!           type(physics_ptend), intent(out)   :: ptend       ! indivdual parameterization tendencies
+!           type(physics_buffer_desc), pointer :: pbuf(:)
+!
+!           ! local vars
+!
+!           integer  :: ncol                     ! number of atmospheric columns
+!           integer  :: lchnk                    ! chunk identifier
+!           integer  :: m,mm, i,k
+!
+!           real(r8) :: sflx_tot_dst(pcols)
+!           real(r8) :: sflx_tot_slt(pcols)
+!
+!           real(r8) :: iscavt(pcols, pver)
+!           real(r8) :: scavt(pcols, pver)
+!           real(r8) :: scavcoef(pcols,pver)     ! Dana and Hales coefficient (/mm) (0.1)
+!           real(r8) :: sflx(pcols)              ! deposition flux
+!
+!           real(r8) :: icscavt(pcols, pver)
+!           real(r8) :: isscavt(pcols, pver)
+!           real(r8) :: bcscavt(pcols, pver)
+!           real(r8) :: bsscavt(pcols, pver)
+!
+!           real(r8) :: sol_factb, sol_facti
+!
+!           real(r8) :: rainmr(pcols,pver)       ! mixing ratio of rain within cloud volume
+!           real(r8) :: cldv(pcols,pver)         ! cloudy volume undergoing scavenging
+!           real(r8) :: cldvcu(pcols,pver)       ! Convective precipitation area at the top interface of current layer
+!           real(r8) :: cldvst(pcols,pver)       ! Stratiform precipitation area at the top interface of current layer
+!
+!           real(r8), pointer :: fracis(:,:,:)   ! fraction of transported species that are insoluble
+!
+!           type(wetdep_inputs_t) :: dep_inputs  ! obj that contains inputs to wetdepa routine
+!
+!           character(len=*), parameter :: subname = 'aero_model_wetdep'
+!
+!           call pbuf_get_field(pbuf, fracis_idx, fracis, start=(/1,1,1/), kount=(/pcols, pver, pcnst/) )
+!
+!           call physics_ptend_init(ptend, state%psetcols, 'aero_model_wetdep', lq=wetdep_lq)
+!
+!       if (nwetdep<1) return
+!
+!       call endrun(subname//":: is not yet implemented")
+!
+!         endsubroutine aero_model_wetdep
+!
   !-------------------------------------------------------------------------
   ! provides aerosol surface area info for sectional aerosols
   ! called from mo_usrrxt

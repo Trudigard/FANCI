@@ -200,6 +200,13 @@ contains
        if (.not.associated(aero_props)) then
           call endrun(subrname//' : construction of aero_props sectional_aerosol_properties object failed')
        end if
+       if (convproc_do_aer) then
+   !     convproc_do_aer = .False.
+           call endrun(subrname// &
+                   ' : convproc_do_aer=.true. is not supported for the oslo_sectional scheme '// &
+                   '(aero_convproc assumes per-bin mass indexing; sectional carries mass per range). '// &
+                   'Set convproc_do_aer=.false.')
+       end if
     !endif
     case default
         call endrun(subrname//' : cannot determine aerosol model')
@@ -301,9 +308,9 @@ if (masterproc) then
       call addfld (trim(name)//'SFSBS', &
            horiz_only,  'A',baseunits//'/m2/s ','Wet deposition flux (belowcloud, stratiform) at surface')
 
-      if (convproc_do_aer) then
-         call addfld (trim(name)//'SFSEC', &
+      call addfld (trim(name)//'SFSEC', &
               horiz_only,  'A',unit_basename//'/m2/s','Wet deposition flux (precip evap, convective) at surface')
+      if (convproc_do_aer) then
          call addfld (trim(name)//'SFSES', &
               horiz_only,  'A',unit_basename//'/m2/s','Wet deposition flux (precip evap, stratiform) at surface')
          call addfld (trim(name)//'SFSBD', &
@@ -1065,7 +1072,7 @@ if (masterproc) then
       ag0 = dg0/2._r8
       sx = logsig
       xg0 = log( ag0 )
-      if (sx<=0._r8) then
+      if (aero_props%model_is('oslo_sectional')) then
           na=1
       else
 
@@ -1150,7 +1157,8 @@ if (masterproc) then
       anumsum = 0._r8
       avolsum = 0._r8
       do i = 1, na
-          if (sx <=0._r8) then
+          if (aero_props%model_is('oslo_sectional')) then
+
               ! Assume just one mean value and one bin:
               a = ag0 ! radius of bin center.
               ynumaerosv(i) = 1._r8 !all in one
