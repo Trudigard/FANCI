@@ -17,9 +17,9 @@ Setup guide. It covers **two** repos:
 
 ## 1. Fork on GitHub
 Fork both repositories:
-- **Host model:** fork [`Trudigard/CAM`](https://github.com/Trudigard/CAM.git) (easiest if you don't already have a fork) or upstream
-  [`NorESMhub/CAM`](https://github.com/NorESMhub/CAM.git)  → `github.com/<GITHUB_USER>/CAM`
-- **Aerosol code:** fork [`Trudigard/OsloSectional`](https://github.com/Trudigard/OsloSectional.git) → `github.com/<GITHUB_USER>/OsloSectional`
+- **Host model:** fork  upstream (recommended)
+  [`NorESMhub/CAM`](https://github.com/NorESMhub/CAM.git)  OR christinas fork [`Trudigard/CAM`](https://githhttps://github.com/Trudigard/OsloSectional/blob/saltydust/SETUP.mdub.com/Trudigard/CAM.git)  → `github.com/<GITHUB_USER>/CAM`
+- **Aerosol code:** fork [NorESMHub/OsloSectional](https://github.com/NorESMhub/OsloSectional)(recommended) OR christinas fork [`Trudigard/OsloSectional`](https://github.com/Trudigard/OsloSectional.git) → `github.com/<GITHUB_USER>/OsloSectional`
 
 ## 2. Clone the host model on Olivia
 
@@ -42,6 +42,20 @@ git checkout -b <your_branch_name> christinafork/saltydust
 > `christinafork/saltydust` directly leaves you in **detached HEAD**, where commits are easy to lose.
 
 ## 4. Pull in the external components
+[From here]( https://github.com/NorESMhub/noresm3_dev_simulations/wiki/Running-NorESM-on-Olivia)
+First
+```bash
+module purge
+module load NRIS/Login
+module load Python/3.12.3-GCCcore-13.3.0
+module save mod_noresm
+```
+then next time
+```bash
+module r mod_noresm
+
+```
+Then run: 
 
 ```bash
 ./bin/git-fleximod update
@@ -58,8 +72,8 @@ This checks out `src/chemistry/oslo_sectional` and the other externals at their 
 cd src/chemistry/oslo_sectional
 git remote set-url origin https://github.com/<GITHUB_USER>/OsloSectional.git
 git remote add christinafork https://github.com/Trudigard/OsloSectional.git
-git fetch christinafork origin
-git checkout -b wetdep_dev christinafork/saltydust
+git fetch christinafork 
+git checkout -b <your_branch_name> christinafork/saltydust
 cd -
 ```
 
@@ -77,7 +91,7 @@ From the `CAM_SEC` root:
 ```
 
 To run a **single** test instead of the whole category, name it explicitly, e.g.:
-
+(COMPSET='SecDust')
 ```bash
 ./cime/scripts/create_test SMS_Ln9.ne16pg3_ne16pg3_mtn14.<COMPSET>.olivia_intel \
   -r /cluster/work/projects/nn9560k/$USER/ -p NN9560K \
