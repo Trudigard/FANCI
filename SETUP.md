@@ -1,11 +1,11 @@
-# NorESM / CAM sectional aerosol — repo setup on Olivia
+# NorESM / CAM FANCI aerosol — repo setup on Olivia
 
 Setup guide. It covers **two** repos:
 
 | What | Local path | Your fork (`origin`) | Christina's (`christinafork`) |
 |---|---|---|---|
 | Host model + CIME | `CAM_SEC/` | `<GITHUB_USER>/CAM` | `Trudigard/CAM` |
-| Sectional aerosol code (this repo) | `CAM_SEC/src/chemistry/oslo_sectional/` | `<GITHUB_USER>/OsloSectional` | `Trudigard/OsloSectional` |
+| FANCI aerosol code (this repo) | `CAM_SEC/src/chemistry/FANCI/` | `<GITHUB_USER>/FANCI` | `Trudigard/FANCI` |
 
 ## Prerequisites
 
@@ -18,8 +18,8 @@ Setup guide. It covers **two** repos:
 ## 1. Fork on GitHub
 Fork both repositories:
 - **Host model:** fork  upstream (recommended)
-  [`NorESMhub/CAM`](https://github.com/NorESMhub/CAM.git)  OR christinas fork [`Trudigard/CAM`](https://githhttps://github.com/Trudigard/OsloSectional/blob/saltydust/SETUP.mdub.com/Trudigard/CAM.git)  → `github.com/<GITHUB_USER>/CAM`
-- **Aerosol code:** fork [NorESMHub/OsloSectional](https://github.com/NorESMhub/OsloSectional)(recommended) OR christinas fork [`Trudigard/OsloSectional`](https://github.com/Trudigard/OsloSectional.git) → `github.com/<GITHUB_USER>/OsloSectional`
+  [`NorESMhub/CAM`](https://github.com/NorESMhub/CAM.git)  OR christinas fork [`Trudigard/CAM`](https://githhttps://github.com/Trudigard/FANCI/blob/saltydust/SETUP.mdub.com/Trudigard/CAM.git)  → `github.com/<GITHUB_USER>/CAM`
+- **Aerosol code:** fork [NorESMHub/FANCI](https://github.com/NorESMhub/FANCI)(recommended) OR christinas fork [`Trudigard/FANCI`](https://github.com/Trudigard/FANCI.git) → `github.com/<GITHUB_USER>/FANCI`
 
 ## 2. Clone the host model on Olivia
 
@@ -61,17 +61,17 @@ Then run:
 ./bin/git-fleximod update
 ```
 
-This checks out `src/chemistry/oslo_sectional` and the other externals at their pinned commits.
+This checks out `src/chemistry/FANCI` and the other externals at their pinned commits.
 
 ## 5. Set up this aerosol repo for development
 
-`git-fleximod` leaves `src/chemistry/oslo_sectional` on a detached commit pointing at Christina's
-`OsloSectional`. Repoint `origin` at your fork so you can commit and push:
+`git-fleximod` leaves `src/chemistry/FANCI` on a detached commit pointing at Christina's
+`FANCI`. Repoint `origin` at your fork so you can commit and push:
 
 ```bash
-cd src/chemistry/oslo_sectional
-git remote set-url origin https://github.com/<GITHUB_USER>/OsloSectional.git
-git remote add christinafork https://github.com/Trudigard/OsloSectional.git
+cd src/chemistry/FANCI
+git remote set-url origin https://github.com/<GITHUB_USER>/FANCI.git
+git remote add christinafork https://github.com/Trudigard/FANCI.git
 git fetch christinafork 
 git checkout -b <your_branch_name> christinafork/saltydust
 cd -
@@ -80,7 +80,7 @@ cd -
 > After this, `git-fleximod update`
 > will warn about the modified external — that is expected; do not let it reset your branch.
 
-## 6. Run the sectional test suite
+## 6. Run the FANCI test suite
 
 
 
@@ -105,9 +105,9 @@ To run a **single** test instead of the whole category, name it explicitly, e.g.
 **Your own work**
 
 - Commit and push to your fork / your branch — in whichever repo you changed
-  (`CAM_SEC/` for host-model or CIME changes, `src/chemistry/oslo_sectional/` for aerosol code).
+  (`CAM_SEC/` for host-model or CIME changes, `src/chemistry/FANCI/` for aerosol code).
 
 **Sharing upstream**
 
 - Push your branch to your fork.
-- Open a pull request against Christina's repo (`Trudigard/CAM` or `Trudigard/OsloSectional`).
+- Open a pull request against Christina's repo (`Trudigard/CAM` or `Trudigard/FANCI`).
