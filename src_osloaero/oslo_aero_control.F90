@@ -10,7 +10,7 @@ module oslo_aero_control
   use namelist_utils,    only: find_group_name
   use cam_logfile,       only: iulog
   use cam_abortutils,    only: endrun
-  !use atm_import_export, only: drv_dms_from_ocn => dms_from_ocn
+  use cam_control_mod,   only: dms_from_ocn
 
   implicit none
   private
@@ -20,7 +20,7 @@ module oslo_aero_control
 
   ! Public module data
   ! Take DMS from ocean?
-  logical, public, protected :: dms_from_ocn = .false.
+  public :: dms_from_ocn ! Forward from cam_control_mod
 
   ! Private module data
   character(len=16), parameter :: unset_str = 'UNSET'
@@ -29,6 +29,7 @@ module oslo_aero_control
 
   ! Public Namelist variables:
   logical, public, protected :: use_aerocom = .false. ! If true, turn on aerocom output
+  real(r8), public, protected :: rh_fine_aer_scale_fact_optics = 1.0_r8
 
   ! Private Namelist variables:
   real(r8)          :: volc_fraction_coarse = 0.0_r8  !Fraction of volcanic aerosols in coarse mode
@@ -61,7 +62,7 @@ contains
     namelist /oslo_ctl_nl/ volc_fraction_coarse, aerotab_table_dir, dms_source, &
                            dms_source_type, opom_source, opom_source_type, &
                            ocean_filename, ocean_filepath, dms_cycle_year, opom_cycle_year, &
-                           use_aerocom
+                           use_aerocom, rh_fine_aer_scale_fact_optics
     !-----------------------------------------------------------------------------
 
     if (masterproc) then
@@ -110,8 +111,10 @@ contains
     call mpi_bcast(ocean_filepath, len(ocean_filepath), mpi_character, mstrid, mpicom, ierr)
     if (ierr /= mpi_success) call endrun(subname//" mpi_bcast: ocean_filepath")
 
-    ! Set this from the driver namelist (always read first)
-    !dms_from_ocn = drv_dms_from_ocn
+    ! Relhum scaling in the optics for tuning of aerosol optical depth
+    call mpi_bcast(rh_fine_aer_scale_fact_optics, 1, mpi_real8, mstrid, mpicom, ierr)
+    if (ierr /= mpi_success) call endrun(subname//" mpi_bcast: rh_fine_aer_scale_fact_optics")
+
 
     ! Reset dms_source if ocean is sending dms to atm
     if (dms_from_ocn) then
@@ -206,4 +209,5 @@ contains
     if ( present(opom_cycle_year_out      ) ) opom_cycle_year_out = opom_cycle_year
 
   end subroutine oslo_aero_getopts
+
 end module oslo_aero_control

@@ -125,6 +125,8 @@ contains
   !===============================================================================
   subroutine oslo_aero_ocean_init()
 
+   use phys_control,   only : history_aerosol_forcing
+
     ! local variables
     integer  :: astat
     integer  :: ispec
@@ -183,7 +185,17 @@ contains
             cycle_yr(ispec), fixed_ymd, fixed_tod, data_type(ispec) )
     enddo
     call addfld( 'odms', horiz_only,  'A',  'nmol/L', 'DMS upper ocean concentration' )
-    call add_default('odms', 1, ' ')
+    if ( history_aerosol_forcing ) then
+        call add_default('odms', 1, ' ')
+    endif
+
+    call addfld('emipomocean', horiz_only,  'A',  'kg/m2/sec', 'POM ocean emissions flux' )
+    ! Note: This variable is only computed if oslo_aero_opom_inq is .true.
+    if (history_aerosol_forcing .and. oslo_aero_opom_inq()) then
+       call add_default('emipomocean', 1, ' ')
+    end if
+
+
 
   endsubroutine oslo_aero_ocean_init
 
@@ -200,9 +212,6 @@ contains
     integer :: ispec
 
     do ispec = 1,n_ocean_species
-                        if (masterproc) then
-        write(iulog,*) 'DEBUG: advance_trcdata from: oslo_aero_ocean_adv '
-    end if
        call advance_trcdata( oceanspcs(ispec)%fields, oceanspcs(ispec)%file, state, pbuf2d  )
     end do
 
@@ -310,6 +319,8 @@ contains
        flux(:ncol)   = c_o*omFrac(:ncol) * em_ss1(:ncol)
        opomem_out(:ncol) = flux(:ncol)
     endif
+
+    call outfld('emipomocean', opomem_out(:ncol), ncol, lchnk)
 
   end subroutine oslo_aero_opom_emis
 
