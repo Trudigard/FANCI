@@ -6,7 +6,7 @@ Contains configuration files for FANCI that are used/executed during the build p
 More information in the [config documentation](config/CONFIG.md)
 
 ## src_cam
-These folders contain files from OsloAero and CAM that are currently necessary to make the FANCI code run. These files will be phased out in the future.
+Contains files from OsloAero and CAM that are currently necessary to make the FANCI code run. These files will be phased out in the future.
 
 ## src
 The FANCI source code.
