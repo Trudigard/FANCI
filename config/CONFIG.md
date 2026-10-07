@@ -1,4 +1,4 @@
-# Oslo sectional configuration
+# FANCI configuration
 User input and bin_config.py. These configuration files are used to specify the bin structure, as well as the aerosol species and their properties. bin_config.py is called by cime_config/buildnml during the build process when an oslo_sectional compset is being used.
 The general workflow is:
 
@@ -100,10 +100,10 @@ Modified chem_mech.in file
 ## Integration in NorESM build process
 - `bld/definition.xml` : Defines name of the chemistry $chem for the perl files (e.g. dust_oslo_sectional). Also includes CAM_AEROSOL_CONFIG_HASH in order for it to be cached (?)
 - `bld/build-namelist` : Sets namelist values using the $chem definition -> some of these may need to be extracted to port the aerosol model! E.g. scavenging coefficients, etc.
-- `bld/configure` : add dust_oslo_sectional chemistry, caches cam_aerosol_config_hash to config_cache, give priority to oslo_sectional src paths
-- `bld/namelist_files/use_cases` : Contains use cases for the oslo_sectional compsets, currently only defaults
-- `cime_config/config_component.xml` : Detailed specifications for oslo_sectional compsets, what chemistry to use etc., also xml variable definitions for cam_aerosol_config and cam_aerosol_config_hash
-- `cime_config/config_compsets.xml` : Name and definition for oslo_Sectional compsets
+- `bld/configure` : add dust_oslo_sectional chemistry, caches cam_aerosol_config_hash to config_cache, give priority to FANCI src paths
+- `bld/namelist_files/use_cases` : Contains use cases for the FANCI compsets, currently only defaults
+- `cime_config/config_component.xml` : Detailed specifications for FANCI compsets, what chemistry to use etc., also xml variable definitions for cam_aerosol_config and cam_aerosol_config_hash
+- `cime_config/config_compsets.xml` : Name and definition for FANCI compsets
 - `cime_config/buildcpp` : added cam_aerosol_config, and cam_aerosol_config_hash to add hash to cache
 - `cime_config/buildnml` : Checks if aerosol config file xml variable is set. If so, run bin_config.bin_config, buildcpp and cache the hash for aerosol config. Later call bin_config.add_oslo_sectional_nl to add new namelists to atm_in
 - `cime_config/QueryBuildCache.py`: script added to read xml files

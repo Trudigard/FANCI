@@ -1,36 +1,31 @@
-# OsloSectional
-Oslo Sectional Aerosol Model (Name to be decided!)
+# FANCI
+The sectional aerosol model for NorESM (Flexible Aerosol Number and Composition Interactions)
 
 ## config
-Contains configuration files for the sectional aerosol model that are used/executed during the build process.
+Contains configuration files for FANCI that are used/executed during the build process.
 More information in the [config documentation](config/CONFIG.md)
 
 ## src_osloaero and src_cam
-These folders contain files from OsloAero and CAM that have been changed to make the oslo_sectional code run. However, this should only be a temporary fix to avoid changing CAM code at this stage.
+These folders contain files from OsloAero and CAM that are currently necessary to make the FANCI code run. These files will be phased out in the future.
 
 ## src
-The oslo_sectional source code.
-Files that have been significantly edited so far:
-* sectional_aerosol_properties_mod.F90
-* sectional_aerosol_state_mod.F90
-* dust_model.F90: Handles dust emissions (INPUT)
-* aero_model.F90: Main calls to objects, reads general namelists
+The FANCI source code.
 
 ## ../pp_dust_oslo_sectional
 * chemistry.F90
 * chem_mech.in
 
 ## Getting this thing running
-Note: This setup is temporary
-1. Clone Christina's CAM fork https://github.com/Trudigard/CAM.git
-2. Switch branch (e.g. sec-stable has the newest changes)
-3. run ./bin/git-fleximod update
-4. cd into src/chemistry/oslo_sectional
-5. git switch sec-stable
-6. Compset: SecDust
+A quick guide is in the [Setup documentation](SETUP.md) - wiki coming soon.
 
-## branches
-- sectional_develop : Reviewed code, currently very outdated
-- sec-stable : NOT reviewed but short tests have passed
-- stale-* : Old branches, to be deleted soon
-- other branches are current working feature branches
+## How to contribute
+PR's should be made to the NorESMhub repositories for CAM and FANCI respectively.
+
+NorESMhub/CAM:
+* PR's from contributors should go into the branch sectional_develop
+* Contributors are responsible to keep their clones and forks up to date with the newest CAM version from NorESMhub/CAM/sectional_develop
+* CrhistinaVB is responsible to keep NorESMhub/CAM/sectional_develop up to date with NorESMhub/CAM/noresm_develop
+
+NorESMhub/FANCI:
+* PR's from contributors should go into sectional_develop
+* Contributors are responsible to keep their clones and forks up to date with NorESMhub/FANCI/sectional_develop
