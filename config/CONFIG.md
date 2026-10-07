@@ -1,5 +1,5 @@
 # FANCI configuration
-User input and bin_config.py. These configuration files are used to specify the bin structure, as well as the aerosol species and their properties. bin_config.py is called by cime_config/buildnml during the build process when a FANCI compset is being used.
+User input and fanci_config.py. These configuration files are used to specify the bin structure, as well as the aerosol species and their properties. fanci_config.py is called by cime_config/buildnml during the build process when a FANCI compset is being used.
 The general workflow is:
 
 ### Input
@@ -7,7 +7,7 @@ The general workflow is:
 - **chem_mech.in** : Lists all gas species and their chemical reactions but *without* aerosol tracers
 
 ### Processing
-- **bin_config.py** : Executed in buildnml, creates files read by the model and puts them in the CASEDIR
+- **fanci_config.py** : Executed in buildnml, creates files read by the model and puts them in the CASEDIR
 
 ### Output
 - **fanci_aerosol_properties_nl** : Namelist for the general aerosol properties, included in atm_in (CASEDIR)
@@ -25,13 +25,13 @@ Specifies the bin configuration, aerosol species and their properties.
 
 ### Range specs
 - **ranges**: Boolean indicating whether size resolution for chemical species should be lower than total aerosol number concentration. If `ranges == True`: The bins (aerosol number concentration) and ranges (chemical composition) have different size resolutions. The composition in a number of adjacent bins (one range) is averaged. If `ranges == False`: The scheme works like a classical sectional scheme where each species has one tracer per bin.
-- **range_bounds**: The *boundary* radii for the ranges [nm]. These range bounds get adjusted to the closest bin bound, once they are calculated in bin_config.py
+- **range_bounds**: The *boundary* radii for the ranges [nm]. These range bounds get adjusted to the closest bin bound, once they are calculated in fanci_config.py
 
 ### Species
-All species have their own section. bin_config.py will assume that every section (denoted by the [] parentheses) after [RANGE SPECS] is a new species.
+All species have their own section. fanci_config.py will assume that every section (denoted by the [] parentheses) after [RANGE SPECS] is a new species.
 Each species needs all the properties specified below:
 
-- **[NAME]**                      : The name for the species, this is only relevant in bin_config.py
+- **[NAME]**                      : The name for the species, this is only relevant in fanci_config.py
 - **active** = \<True>/\<False>       : Is this species an active component or not. If set to true, the corresponding tracers are added to chem_mech.in and the fanci_aerosol_properties_nl namelist in atm_in
 - **short_name** = \<XX>           : A short string identifier for each species, e.g. *DU* or *SO4*
 - **long_name** = \<some string>   : A long name for the species, e.g. *Dust aerosol*
@@ -43,7 +43,7 @@ Each species needs all the properties specified below:
 - **kappa** = 0.0               : Hygroscopicity parameter kappa, current values from SALSA (Oslo_aero: hygroscopicity according to eq. 4 in Abdul-Razzak and Ghan (doi: 10.1029/1999JD901161/), calculated as `nr Ions * osmotic coefficient * soluble mass fraction / molecular weight`)
 
 
-## bin_config.py
+## fanci_config.py
 
 ### Features
 - Reads and processes the configuration settings in the *.ini file described above
@@ -83,7 +83,7 @@ The script contains two main functions: *fanci_config* and *add_FANCI_nl* that c
 Modified chem_mech.in file
 
 ## Usage instructions
-*buildnml* will automatically call bin_config.py, if a sectional aerosol configuration file is defined either via user input or by using a FANCI compset.
+*buildnml* will automatically call fanci_config.py, if a sectional aerosol configuration file is defined either via user input or by using a FANCI compset.
 
 ### Running from command line
 **Arguments**
@@ -95,7 +95,7 @@ Modified chem_mech.in file
 
 **Example**
 
-`python bin_config.py --aerconf config.ini --chem_mech chem_mech.in --chem_mech_new my_chem_mech.in --atm_in atm_in --atm_in_new atm_in_new`
+`python fanci_config.py --aerconf config.ini --chem_mech chem_mech.in --chem_mech_new my_chem_mech.in --atm_in atm_in --atm_in_new atm_in_new`
 
 ## Integration in NorESM build process
 - `bld/definition.xml` : Defines name of the chemistry $chem for the perl files (e.g. fanci). Also includes CAM_AEROSOL_CONFIG_HASH in order for it to be cached (?)
@@ -105,6 +105,6 @@ Modified chem_mech.in file
 - `cime_config/config_component.xml` : Detailed specifications for FANCI compsets, what chemistry to use etc., also xml variable definitions for cam_aerosol_config and cam_aerosol_config_hash
 - `cime_config/config_compsets.xml` : Name and definition for FANCI compsets
 - `cime_config/buildcpp` : added cam_aerosol_config, and cam_aerosol_config_hash to add hash to cache
-- `cime_config/buildnml` : Checks if aerosol config file xml variable is set. If so, run bin_config.bin_config, buildcpp and cache the hash for aerosol config. Later call bin_config.add_FANCI_nl to add new namelists to atm_in
+- `cime_config/buildnml` : Checks if aerosol config file xml variable is set. If so, run fanci_config.fanci_config, buildcpp and cache the hash for aerosol config. Later call fanci_config.add_FANCI_nl to add new namelists to atm_in
 - `cime_config/QueryBuildCache.py`: script added to read xml files
 - `src/chemistry/pp_fancil` : contains initial chem_mech.in and chemistry.F90 files (+ other initial chem files, not needed?)
