@@ -5,7 +5,7 @@ The sectional aerosol model for NorESM (Flexible Aerosol Number and Composition 
 Contains configuration files for FANCI that are used/executed during the build process.
 More information in the [config documentation](config/CONFIG.md)
 
-## src_osloaero and src_cam
+## src_cam
 These folders contain files from OsloAero and CAM that are currently necessary to make the FANCI code run. These files will be phased out in the future.
 
 ## src
@@ -24,7 +24,7 @@ PR's should be made to the NorESMhub repositories for CAM and FANCI respectively
 NorESMhub/CAM:
 * PR's from contributors should go into the branch sectional_develop
 * Contributors are responsible to keep their clones and forks up to date with the newest CAM version from NorESMhub/CAM/sectional_develop
-* CrhistinaVB is responsible to keep NorESMhub/CAM/sectional_develop up to date with NorESMhub/CAM/noresm_develop
+* @Trudigard is responsible to keep NorESMhub/CAM/sectional_develop up to date with NorESMhub/CAM/noresm_develop
 
 NorESMhub/FANCI:
 * PR's from contributors should go into sectional_develop
