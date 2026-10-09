@@ -61,7 +61,7 @@ The script contains two main functions: *fanci_config* and *add_FANCI_nl* that c
 - **Atmospheric namelist file (atm_in**): The original CAM namelist required for NorESM, which will be modified to include the sectional aerosol namelists generated in fanci_config
 
 ### Output files
-- **Namelist file (FANCI_nl)**: This temporary file contains the sectional aerosol settings for NorESM and is inserted into atm_in via  the *add_FANCI_nl* call in buildnml following alphabetical order for namelists.
+- **Namelist file (atm_in) + edits**: fanci_config.py creates additional namelist entries that are inserted into the CAM atm_in namelist file via the *add_FANCI_nl* call in buildnml following alphabetical order for namelists.
 
      #### fanci_properties_nl
     - **fanci_nspecies_tot**: Number of species in the model. This corresponds to the number of sections in the *.ini file describing an aerosol species
@@ -100,7 +100,7 @@ Modified chem_mech.in file
 ## Integration in NorESM build process
 - `bld/definition.xml` : Defines name of the chemistry $chem for the perl files (e.g. fanci). Also includes CAM_AEROSOL_CONFIG_HASH in order for it to be cached (?)
 - `bld/build-namelist` : Sets namelist values using the $chem definition -> some of these may need to be extracted to port the aerosol model! E.g. scavenging coefficients, etc.
-- `bld/configure` : add _fanci chemistry, caches cam_aerosol_config_hash to config_cache, give priority to FANCI src paths
+- `bld/configure` : add pp_fanci chemistry, caches cam_aerosol_config_hash to config_cache, give priority to FANCI src paths
 - `bld/namelist_files/use_cases` : Contains use cases for the FANCI compsets, currently only defaults
 - `cime_config/config_component.xml` : Detailed specifications for FANCI compsets, what chemistry to use etc., also xml variable definitions for cam_aerosol_config and cam_aerosol_config_hash
 - `cime_config/config_compsets.xml` : Name and definition for FANCI compsets

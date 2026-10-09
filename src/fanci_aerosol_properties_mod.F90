@@ -1545,8 +1545,6 @@ end if
 
     if (trim(query) == 'fanci') then
        model_is = .true.
-    else if (trim(query) == 'fanci') then
-       model_is = .true.
     else
        model_is = .false.
     end if

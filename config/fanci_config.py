@@ -2,8 +2,8 @@
 # Python script that reads config.ini with parameter settings
 # for the FANCI sectional aerosol model in NorESM
 # Output:
-# namelist FANCI_nl with settings for NorESM
-# my_chem_mech.in: edited to contain aerosol tracers
+# atm_in: edited initial atm_in namelist file with settings for FANCI aerosols
+# my_chem_mech.in: edited chem_mech.in to contain aerosol tracers
 # ==============================================================================
 
 import os
@@ -11,6 +11,7 @@ import logging
 import configparser
 import argparse
 import math
+from datetime import datetime
 
 #logging.basicConfig(level=logging.INFO) # basic level would be "warning"
 logger = logging.getLogger("fanci_config")
@@ -269,55 +270,55 @@ def fanci_config(aerconf_file, chemconf, chem_infile, FANCI_in):
     # Write to temporary FANCI namelist file
     # =====================================================================
 
-    f = open(FANCI_in, "w")
-    f.write("&fanci_properties_nl\n")
-    f.write(" fanci_nspecies_tot       =  ")
-    f.write(f"{nspecies_tot} \n")
-    f.write(" fanci_nbins       =  ")
-    f.write(f"{bin_specs.N} \n")
-    f.write(" fanci_nranges       =  ")
-    f.write(f"{len(range_specs.range_bnds)-1} \n")
-    f.write(" fanci_nspecies       =  ")
-    for i in range(0, len(range_specs.range_bnds)-1):
-        f.write(f"{range_specs.nspecies[i]}")
-        if i != len(range_specs.range_bnds)-2:
-            f.write(',')
-    f.write("\n")
-    f.write(" fanci_bin_bounds     =  ")
-    for i in range(bin_specs.N):
-        f.write(f"'{bin_specs.r_bnds[i]:.3f}D0:{bin_specs.r_bnds[i+1]:.3f}D0'")
-        if i != bin_specs.N-1:
-            f.write(', ')
-    f.write("\n")
+    with open(FANCI_in, "w") as f:
+        f.write("&fanci_properties_nl\n")
+        f.write(" fanci_nspecies_tot       =  ")
+        f.write(f"{nspecies_tot} \n")
+        f.write(" fanci_nbins       =  ")
+        f.write(f"{bin_specs.N} \n")
+        f.write(" fanci_nranges       =  ")
+        f.write(f"{len(range_specs.range_bnds)-1} \n")
+        f.write(" fanci_nspecies       =  ")
+        for i in range(0, len(range_specs.range_bnds)-1):
+            f.write(f"{range_specs.nspecies[i]}")
+            if i != len(range_specs.range_bnds)-2:
+                f.write(',')
+        f.write("\n")
+        f.write(" fanci_bin_bounds     =  ")
+        for i in range(bin_specs.N):
+            f.write(f"'{bin_specs.r_bnds[i]:.3f}D0:{bin_specs.r_bnds[i+1]:.3f}D0'")
+            if i != bin_specs.N-1:
+                f.write(', ')
+        f.write("\n")
 
-    f.write(" fanci_bin_centers        =  ")
-    for i in range(bin_specs.N):
-        f.write(f"'{bin_specs.r[i]:.3f}D0'")
-        if i != bin_specs.N-1:
-            f.write(', ')
-    f.write("\n")
+        f.write(" fanci_bin_centers        =  ")
+        for i in range(bin_specs.N):
+            f.write(f"'{bin_specs.r[i]:.3f}D0'")
+            if i != bin_specs.N-1:
+                f.write(', ')
+        f.write("\n")
 
-    f.write(" fanci_range_bounds       =  ")
-    for i in range(len(range_specs.range_bnds)-1):
-        f.write(f"'{range_specs.range_bnd_bin_idx[i][0]}:{range_specs.range_bnd_bin_idx[i][1]}'")
-        if i != len(range_specs.range_bnds)-2:
-            f.write(', ')
-    f.write("\n")
-    f.write("/\n")
+        f.write(" fanci_range_bounds       =  ")
+        for i in range(len(range_specs.range_bnds)-1):
+            f.write(f"'{range_specs.range_bnd_bin_idx[i][0]}:{range_specs.range_bnd_bin_idx[i][1]}'")
+            if i != len(range_specs.range_bnds)-2:
+                f.write(', ')
+        f.write("\n")
+        f.write("/\n")
 
-    for species in species_obj_list:
-        if species.active:
-            f.write("&fanci_properties_aerosol_nl\n")
-            f.write(f" fanci_aerosol_name      =  '{species.short_name}' \n")
-            f.write(f" fanci_aerosol_type = '{species.species_type}' \n")
-            f.write(" fanci_aerosol_range       =  ")
-            f.write(f"'{species.range_idx[0]}:{species.range_idx[-1]}' \n")
-            f.write(f" fanci_aerosol_mixed     =  .{species.mixed}. \n")
-            f.write(f" fanci_aerosol_density   =  {species.density:.3f} \n")
-            f.write(f" fanci_aerosol_weight    =  {species.molecular_weight:.3f} \n")
-            f.write(f" fanci_aerosol_kappa =    {species.kappa:.3f} \n")
-            f.write("/\n")
-    f.close()
+        for species in species_obj_list:
+            if species.active:
+                f.write("&fanci_properties_aerosol_nl\n")
+                f.write(f" fanci_aerosol_name      =  '{species.short_name}' \n")
+                f.write(f" fanci_aerosol_type = '{species.species_type}' \n")
+                f.write(" fanci_aerosol_range       =  ")
+                f.write(f"'{species.range_idx[0]}:{species.range_idx[-1]}' \n")
+                f.write(f" fanci_aerosol_mixed     =  .{species.mixed}. \n")
+                f.write(f" fanci_aerosol_density   =  {species.density:.3f} \n")
+                f.write(f" fanci_aerosol_weight    =  {species.molecular_weight:.3f} \n")
+                f.write(f" fanci_aerosol_kappa =    {species.kappa:.3f} \n")
+                f.write("/\n")
+
 
     # ==============================================================================
     # Prepare output for chem_mech.in file
@@ -417,7 +418,7 @@ def _main_func():
     parser.add_argument('--atm_in_new', required=True, help='Path to new atm_in file with sectional aerosol info')
     args = parser.parse_args()
 
-    FANCI_in = 'FANCI_in' # temporary nl file with sectional info
+    FANCI_in = f'FANCI_tmp_{datetime.today().strftime('%Y%m%d%H%M%S')}' # temporary nl file with sectional info
 
     try:
         if not os.path.isfile(args.aerconf):
