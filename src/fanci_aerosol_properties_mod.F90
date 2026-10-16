@@ -1435,6 +1435,10 @@ end if
 
     character(len=*), parameter :: subname = 'rebin_bulk_fluxes'
 
+    if (.not. self%is_active(bulk_type)) then
+        return
+    end if
+
     allocate(bin_dep_flux(self%nbins()), species_bin_dep_flux(self%nbins()), adjusted_diameter(self%nbins()))
     allocate(range_volume(self%nranges()), range_dep_flux(self%nranges()), spec_dep_flux_in(self%nranges()))
     allocate(range_density(self%nranges()), species_massfrac(self%nranges()), spec_dep_flux(self%nranges()))

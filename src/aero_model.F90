@@ -124,7 +124,7 @@ contains
   subroutine aero_model_init( pbuf2d, phys_state)
 
     use mo_chem_utls,   only: get_inv_ndx, get_spc_ndx
-    use chem_mods,   only : gas_pcnst
+    use chem_mods,      only : gas_pcnst
     use mo_tracname,              only: solsym
     use cam_history,    only: addfld, add_default, horiz_only
     use phys_control,   only: phys_getopts
@@ -132,10 +132,11 @@ contains
     use seasalt_model,  only: seasalt_init
     use string_utils,   only: int2str
     !use mo_setsox,      only : setsox, has_sox
-  use ppgrid,               only: begchunk, endchunk, pcols, pver
+  use ppgrid,           only: begchunk, endchunk, pcols, pver
     use aero_deposition_cam, only: aero_deposition_cam_init
     use aer_drydep_mod,  only: inidrydep
     use aero_wetdep_cam, only: aero_wetdep_init
+    use condtend,       only: condensation_init
 
     use oslo_aero_ocean, only: oslo_aero_ocean_init ! TODO: DMS, add to build-namelist and chemistry.F90 and as well
 
@@ -160,6 +161,7 @@ contains
     fracis_idx      = pbuf_get_index('FRACIS')
     prain_idx       = pbuf_get_index('PRAIN')
 
+    call condensation_init(aero_props)
     call oslo_aero_ocean_init() ! DMS
 
     ! TODO: fix this :)
@@ -178,9 +180,6 @@ contains
       !  end do
         call aero_deposition_cam_init(aero_props)
     end if
-
-    call dust_init(aero_props)
-    call seasalt_init(aero_props)
 
 ! TODO: if drydep active:
     call inidrydep(rair, gravit)
@@ -204,6 +203,7 @@ contains
     endif
 
     if (aero_props%is_active('dust')) then
+        call dust_init(aero_props)
 
         do irange = 1, aero_props%spec_nrange(dust_specprop_ndx)
             dummy = trim(aero_props%spec_tracernames(dust_specprop_ndx, irange)) // 'SF'
@@ -227,6 +227,7 @@ contains
     endif
 
     if (aero_props%is_active('seasalt')) then
+        call seasalt_init(aero_props)
 
         do irange = 1, aero_props%spec_nrange(seasalt_specprop_ndx)
             dummy = trim(aero_props%spec_tracernames(seasalt_specprop_ndx, irange)) // 'SF'
@@ -795,9 +796,11 @@ end function aero_model_get_state
       delt, reaction_rates, tfld, pmid, pdel, mbar, relhum, zm, qh2o, cwat,     &
       cldfr, cldnum, airdens, invariants, del_h2so4_gasprod, vmr0, vmr, pbuf )
 
-    use chem_mods,    only : gas_pcnst, adv_mass
-    use mo_tracname,  only: solsym
-    use time_manager, only: get_nstep
+    use chem_mods,      only : gas_pcnst, adv_mass
+    use mo_tracname,    only: solsym
+    use time_manager,   only: get_nstep
+    use condtend,       only: condtend_sub_super
+    use mo_mass_xforms, only: vmr2mmr, mmr2vmr, mmr2vmri
 
     !-----------------------------------------------------------------------
     !      ... dummy arguments
@@ -822,14 +825,18 @@ end function aero_model_get_state
     real(r8), intent(in) :: cwat(:,:)              ! cloud liquid water content (kg/kg)
     real(r8), intent(in) :: cldfr(:,:)
     real(r8), intent(in) :: cldnum(:,:)            ! droplet number concentration (#/kg)
-    real(r8), intent(in) :: vmr0(:,:,:)            ! initial mixing ratios (before gas-phase chem changes)
-    real(r8), intent(inout) :: vmr(:,:,:)          ! mixing ratios ( vmr )
+    real(r8), intent(in) :: vmr0(:,:,:)            ! initial mixing ratios (before gas-phase chem changes) from chemistry
+    real(r8), intent(inout) :: vmr(:,:,:)          ! mixing ratios ( vmr ) from chemistry, includes gas
 
     type(physics_buffer_desc), pointer :: pbuf(:)
 
 
     ! local vars
 !    integer, parameter :: nmodes_aq_chem = 1
+
+    real(r8) :: mmr_gas(ncol, pver, gas_pcnst)
+    real(r8) :: mmr_cond_vap_gasprod0(ncol, pver) ! TODO: add dimension n_cond_vap for several condensing species
+    real(r8) :: mmr_cond_vap_gasprod(ncol, pver) ! TODO: add dimension n_cond_vap for several condensing species
     integer  :: icol,ilev
     integer  :: l_aero
     integer  :: imode,icnst,itrac
@@ -859,21 +866,97 @@ end function aero_model_get_state
     character(len=32) :: name
 
     integer :: l_h2so4, l_dms, l_so2
+    integer  :: imozart
+    integer :: pblh_idx = 0
+
     character(len=*), parameter :: subname = 'aero_model_gasaerexch'
 
     nstep = get_nstep()
 
     delt_inverse = 1.0_r8 / delt
 
+    ! Get height of boundary layer for boundary layer nucleation
+    pblh_idx = pbuf_get_index('pblh')
+
     ! indices of gases to condense
     call cnst_get_ind('H2SO4'  ,l_h2so4, abort=.true.)
     ! gas phase species
     call cnst_get_ind('SO2'    ,l_so2,   abort=.true.) !sulfur dioxide
     call cnst_get_ind('DMS'    ,l_dms,   abort=.true.) !dimethyl sulfide
+    call cnst_get_ind(trim(solsym(1)), imozart, abort=.true.)
 
     ! Get height of boundary layer (needed for boundary layer nucleation)
-   ! call pbuf_get_field(pbuf, pblh_idx, pblh)
+    call pbuf_get_field(pbuf, pblh_idx, pblh)
 
+    ! calculate tendency due to gas phase chemistry and processes
+    dvmrdt(:ncol,:,:) = (vmr(:ncol,:,:) - vmr0(:ncol,:,:)) / delt
+    do icnst = 1, gas_pcnst
+       wrk(:) = 0._r8
+       do ilev = 1,pver
+          wrk(:ncol) = wrk(:ncol) + dvmrdt(:ncol,ilev,icnst)*adv_mass(icnst)/mbar(:ncol,ilev)*pdel(:ncol,ilev)/gravit
+       end do
+
+       call cnst_get_ind(trim(solsym(icnst)), l_aero, abort=.false.)
+
+! TODO: check that there are not multiple species contributing to one output field
+       if ( l_aero == l_h2so4-imozart .or. l_aero == l_dms-imozart .or. l_aero == l_so2-imozart ) then
+           call outfld( 'GS_'//trim(solsym(icnst)), wrk(:ncol), ncol, lchnk )
+       end if
+
+!       if ( l_aero == l_dms) then ! .or. l_aero == l_isoprene .or. l_aero == l_monoterp) then
+!         call outfld( 'sink_'//trim(solsym(icnst)), wrk(:ncol), ncol, lchnk )
+!             call outfld( 'sink_'//trim(solsym(icnst))//'_S', ( wrk(:ncol) * sulfurMassFraction(l_aero) ) , ncol, lchnk )
+!        if (masterproc) then
+!            write(6,*) 'DEBUG: DMS sink (kg/m2/s): ', maxval(wrk(:ncol)), minval(wrk(:ncol))
+!        endif
+!    end if
+    enddo
+
+    ! Unit conversions for gases
+    call vmr2mmr( vmr0, mmr_gas, mbar, ncol )
+
+    ! get mass mixing ratios at start of time step
+! TODO: make this so it works for several species -> e.g. add "precursor" attribute to object ?
+    mmr_cond_vap_gasprod0(:ncol, :) = mmr_gas(:ncol, :, l_h2so4-imozart)
+
+ !   call qqcw2vmr(lchnk, vmrcw, mbar, ncol, loffset, pbuf)
+! TODO: add cloud water aerosol
+    vmrcw = 0._r8
+
+! TODO: aq phase production of SO4
+
+! TODO: condensation (condtend) + nucleation
+    call condtend_sub_super(lchnk, mmr_gas, mmr_cond_vap_gasprod, tfld, pmid, &
+        pdel, delt, ncol, pblh, zm, qh2o, aero_props, master_aero_state(lchnk)%ptr)
+
+      ! osloaerosec: mmr_tend_pcols is gas vmr converted to mmr
+      ! mmr_cond_vap_gasprod
+      !
+
+! condtend input: lchnk, ncol, pmid
+    !h2ommr: layer specific humidity
+    ! t: temperature
+    ! h2so4pc: sulfuric acid concentration
+    ! oxidorg: organic vapour concentration -> set to 0. for now
+    ! coagnuc: coagulation sink -> set to 0. for now
+    ! zm: height at layer midpoint
+    ! pblht: planetary boundary layer height [m]
+    ! d_form: particle size at calculated formation rate [m] -> diameter
+    ! dt: timestep (output is weighted by this)
+! condtend inout:
+    !nuclrate: nucleation rate [#/m3/s]
+    ! nuclrate_pbl_o: nucleation in pbl rate output
+    ! formrate : formation rate output
+    ! formrate_pbl_o: formation in pbl rate output
+    ! orgnucl_o: concentration of organics for output
+    ! h2so4nucl_o: concentration of sulfuric acid for output
+    !
+
+! TODO: coagulation (coagtend)
+! TODO: cloud coagulation
+! Unit conversions
+
+    return
 
   end subroutine aero_model_gasaerexch
 
@@ -946,8 +1029,11 @@ end function aero_model_get_state
         end do
     end if
 
-
   end subroutine aero_model_emissions
+
+  !=============================================================================
+  ! private methods
+  !=============================================================================
 
   subroutine aero_depvel_part( ncol, t, pmid, ram1, fv, vlc_dry, vlc_trb, vlc_grv,  &
                                      radius_part, density_part, lchnk )

@@ -611,6 +611,7 @@ subroutine microp_aero_run ( &
    if (aero_props_obj%model_is('fanci')) then
       aero_state1_obj => fanci_aerosol_state( state1, pbuf,  copy=.true.)
       call aero_state1_obj%set_transported(state1%q)
+
    end if
 
    if (clim_modal_aero.or.clim_carma_aero .or. aero_props_obj%model_is('fanci')) then
@@ -910,11 +911,16 @@ subroutine microp_aero_run ( &
       deallocate(factnum)
    end if
 
+! TODO: check singleton use for oslo_sectional
+   ! Only deallocate for modal/carma aerosol, not for oslo_sectional whose
+   ! aero_state1_obj points to the persistent singleton owned by this module.
    if (associated(aero_state1_obj)) then
-      ! destroy the aerosol state object
-      deallocate(aero_state1_obj)
+      if (aero_modelname /= 'oslo_sectional') then
+        ! Destroy the aerosol state 1 object
+        deallocate(aero_state1_obj)
+      end if
       nullify(aero_state1_obj)
-   endif
+    end if
 
  end subroutine microp_aero_run
 

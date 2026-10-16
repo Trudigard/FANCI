@@ -141,6 +141,7 @@ contains
     else
 
         allocate(newobj,stat=ierr)
+
         if( ierr /= 0 ) then
             nullify(newobj)
             return
@@ -593,8 +594,16 @@ contains
 
     character(len=*), parameter :: subname = 'update_bin'
 
-    call endrun(subname//' is not yet implemented')
+! TODO: fix this for ranges
+! currently a copy of modal
+    if (tnd_ndx > 0) then
+       ! tend(col_ndx, lyr_ndx, tnd_ndx) = - delnum_sum/dtime
+       tend(col_ndx,lyr_ndx,tnd_ndx) = -delnum_sum/dtime
+    else
+        self%bin_numconc(col_ndx, lyr_ndx, bin_ndx) = self%bin_numconc(col_ndx, lyr_ndx, bin_ndx) - delnum_sum
+    end if
 
+! update range
     ! bin_num(bin_ndx) = bin_num + tendency
   end subroutine update_bin
 

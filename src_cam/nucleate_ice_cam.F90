@@ -378,7 +378,7 @@ subroutine nucleate_ice_cam_calc( &
    real(r8),                    intent(in)    :: dtime
    type(physics_ptend),         intent(out)   :: ptend
    class(aerosol_properties),optional, intent(in) :: aero_props
-   class(aerosol_state),optional, intent(in) :: aero_state
+   class(aerosol_state),optional, intent(inout) :: aero_state
 
    ! local workspace
 
