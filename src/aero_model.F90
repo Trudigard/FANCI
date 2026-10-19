@@ -799,7 +799,7 @@ end function aero_model_get_state
     use chem_mods,      only : gas_pcnst, adv_mass
     use mo_tracname,    only: solsym
     use time_manager,   only: get_nstep
-    use condtend,       only: condtend_sub_super
+    use condtend,       only: advance_aero_condtend
     use mo_mass_xforms, only: vmr2mmr, mmr2vmr, mmr2vmri
 
     !-----------------------------------------------------------------------
@@ -926,7 +926,7 @@ end function aero_model_get_state
 ! TODO: aq phase production of SO4
 
 ! TODO: condensation (condtend) + nucleation
-    call condtend_sub_super(lchnk, mmr_gas, mmr_cond_vap_gasprod, tfld, pmid, &
+    call advance_aero_condtend(lchnk, mmr_gas, mmr_cond_vap_gasprod, tfld, pmid, &
         pdel, delt, ncol, pblh, zm, qh2o, aero_props, master_aero_state(lchnk)%ptr)
 
       ! osloaerosec: mmr_tend_pcols is gas vmr converted to mmr
