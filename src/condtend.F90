@@ -30,9 +30,9 @@ module condtend
 
    ! Sectional aerosol specific stuff
    use aerosol_properties_mod,           only: aerosol_properties
-   use sectional_aerosol_properties_mod, only: sectional_aerosol_properties
+   use fanci_aerosol_properties_mod,     only: fanci_aerosol_properties
    use aerosol_state_mod,                only: aerosol_state, ptr2d_t
-   use sectional_aerosol_state_mod,      only: sectional_aerosol_state
+   use fanci_aerosol_state_mod,      only: fanci_aerosol_state
 
    implicit none
 
@@ -63,7 +63,7 @@ contains
       !5th edition, eqn 11-4-4
 
       ! dummy arguments
-      type(sectional_aerosol_properties), intent(in) :: aero_props
+      type(fanci_aerosol_properties), intent(in) :: aero_props
 
       ! local parameters
       real(r8), parameter :: aunit   = 1.6606e-27_r8  ! [kg] Atomic mass unit
@@ -196,8 +196,8 @@ contains
       use constituents, only: pcnst  ! h2so4 and soa nucleation (cka)
 
       ! dummy arguments
-      type(sectional_aerosol_properties), intent(in) :: aero_props
-      type(sectional_aerosol_state), intent(inout) :: aero_state
+      type(fanci_aerosol_properties), intent(in) :: aero_props
+      type(fanci_aerosol_state), intent(inout) :: aero_state
 
       integer,  intent(in)    :: lchnk                 ! chunk identifier
       integer,  intent(in)    :: ncol                  ! number of columns
@@ -294,7 +294,9 @@ contains
                cnt      = 1
                nr_dt    = nr_dt*2
                q(:ncol,:,:) = q_t0(:ncol,:,:)
-               numconc_new(:ncol, :, :) = aero_state%bin_numconc(:ncol,:,:)    ! is reset if timestep is decreased.
+               do ibin = 1, aero_props%nbins()
+                   call aero_state%get_ambient_num(ibin, numconc_new)
+               end do
                coltend(:,:) = 0.0_r8
                coltend_dummy(:,:) = 0.0_r8
                nuclrate_pbl(:,:) = 0.0_r8
@@ -370,8 +372,8 @@ contains
       use constituents,    only: pcnst  ! h2so4 and soa nucleation (cka)
 
       ! dummy arguments
-      type(sectional_aerosol_properties), intent(in) :: aero_props
-      type(sectional_aerosol_state), intent(in) :: aero_state
+      type(fanci_aerosol_properties), intent(in) :: aero_props
+      type(fanci_aerosol_state), intent(in) :: aero_state
 
       real(r8), intent(inout) :: numconc_new(:,:,:) ![#/m3] number concentration new
 
@@ -692,8 +694,8 @@ contains
     ! Moves tracer mass from on bin to the other based on condensational/coagulation growth.
     ! Based on Jacobson Fundamentals of Atmospheric Modeling, second edition (2005),
     ! Chapter   13.5
-    class(sectional_aerosol_properties), intent(in) :: aero_props
-    class(sectional_aerosol_state), intent(in) :: aero_state
+    class(fanci_aerosol_properties), intent(in) :: aero_props
+    class(fanci_aerosol_state), intent(in) :: aero_state
 
     real(r8), intent(in)    :: numberConc_old(:)    ! numbr concentration before growth
     real(r8), intent(in)    :: rho_aer(:)           ! Density of particle)
@@ -834,7 +836,7 @@ contains
     use shr_const_mod,  only: shr_const_rgas
 
     !-- Arguments
-    class(sectional_aerosol_properties), intent(in) :: aero_props
+    class(fanci_aerosol_properties), intent(in) :: aero_props
 
     real(r8), intent(in)  :: dt                ! timestep (output is weighted by this)
     integer,  intent(in)  :: lchnk             ! chunk identifier

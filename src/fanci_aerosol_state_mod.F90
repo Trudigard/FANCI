@@ -582,7 +582,7 @@ contains
   !------------------------------------------------------------------------------
   !------------------------------------------------------------------------------
   subroutine update_bin( self, bin_ndx, col_ndx, lyr_ndx, delmmr_sum, delnum_sum, tnd_ndx, dtime, tend )
-    class(fanci_aerosol_state), intent(in) :: self
+    class(fanci_aerosol_state), intent(inout) :: self
     integer, intent(in) :: bin_ndx                ! bin number
     integer, intent(in) :: col_ndx                ! column index
     integer, intent(in) :: lyr_ndx                ! vertical layer index
@@ -600,7 +600,8 @@ contains
        ! tend(col_ndx, lyr_ndx, tnd_ndx) = - delnum_sum/dtime
        tend(col_ndx,lyr_ndx,tnd_ndx) = -delnum_sum/dtime
     else
-        self%bin_numconc(col_ndx, lyr_ndx, bin_ndx) = self%bin_numconc(col_ndx, lyr_ndx, bin_ndx) - delnum_sum
+        self%state%q(col_ndx,lyr_ndx,self%num_transport_ndx(bin_ndx)) = &
+               self%state%q(col_ndx,lyr_ndx,self%num_transport_ndx(bin_ndx)) - delmmr_sum
     end if
 
 ! update range
