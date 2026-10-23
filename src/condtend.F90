@@ -700,9 +700,7 @@ contains
 
    subroutine move_mass_and_number(bin_mmr_old, bin_numconc_old, rho_air, decrease_dt, aero_props, &
                                      rho_aerosol, bin_mmr_new, bin_numconc_new)
-! bin_mmr: mass in each tracer (kg_aer/kg_air) after growth
-! TODO: add move mass for species
-! TODO: add move number for bins
+    ! bin_mmr: mass in each tracer (kg_aer/kg_air) after growth
     ! Moves tracer mass from on bin to the other based on condensational/coagulation growth.
     ! Based on Jacobson Fundamentals of Atmospheric Modeling, second edition (2005),
     ! Chapter   13.5
@@ -720,12 +718,10 @@ contains
     logical,  intent(out)   :: decrease_dt         ! if set to True, time step is divided
                                                    ! and the procedure is re run
     ! local variables
-    real(r8)                :: volume_new(:)       ! volume after growth dimension(secNrBins)
-    real(r8)                :: xfrac               ! fraction to stay in bin
+    real(r8)                :: particle_volume_grown       ! volume after growth dimension(secNrBins)
+    real(r8)                :: fraction_remaining               ! fraction to stay in bin
     integer                 :: ibin
     !-----------------------------------------------------------------------------------
-
-    allocate(volume_new(aero_props%nbins()))
 
     ! initialize
     bin_mmr_new(:) = 0._r8
@@ -734,32 +730,38 @@ contains
 
     !compute volume in each bin with condensation (by mass) and by number concentration
     do ibin = 1, aero_props%nbins() - 1
+        particle_volume_grown = 0._r8
+
         if (bin_numconc_old(ibin)<1.e-30_r8) then
-            xfrac = 1.0_r8
+            fraction_remaining = 1.0_r8
         else
-            volume_new = bin_mmr_old(ibin) * rho_air / rho_aerosol(ibin) &
+            ! volume of single particle after growth
+            particle_volume_grown = bin_mmr_old(ibin) * rho_air / rho_aerosol(ibin) &
                          / bin_numconc_old(ibin)
 
-            ! fraction to stay in bin
-            xfrac = (aero_props%particle_volume(ibin + 1) - volume_new) &
-                  / (aero_props%particle_volume(ibin + 1) - aero_props%particle_volume(ibin))
-
-        ! TODO: change this condition!!
-            if (xfrac <= 0._r8) then
-                decrease_dt=.TRUE.
+            ! Check that the particles don't grow beyond the next bin, decrease time step
+            if (particle_volume_grown >= aero_props%particle_volume(ibin + 1)) then
+                decrease_dt = .TRUE.
+                return
             end if
 
-            xfrac=max(0._r8, min(1._r8,xfrac))
+            ! fraction to stay in bin
+            fraction_remaining = (aero_props%particle_volume(ibin + 1) - particle_volume_grown) &
+                  / (aero_props%particle_volume(ibin + 1) - aero_props%particle_volume(ibin))
+
+
+            fraction_remaining=max(0._r8, min(1._r8,fraction_remaining))
         end if
 
-        bin_numconc_new(ibin)     = bin_numconc_new(ibin)     + xfrac * bin_numconc_old(ibin)
-        bin_numconc_new(ibin + 1) = bin_numconc_new(ibin + 1) + (1._r8 - xfrac) * bin_numconc_old(ibin)
+        ! Calculate new number concentrations and mass mixing ratios
+        bin_numconc_new(ibin)     = bin_numconc_new(ibin)     + fraction_remaining * bin_numconc_old(ibin)
+        bin_numconc_new(ibin + 1) = bin_numconc_new(ibin + 1) + (1._r8 - fraction_remaining) * bin_numconc_old(ibin)
 
-        bin_mmr_new(ibin)     = bin_mmr_new(ibin)     + xfrac * bin_mmr_old(ibin)
-        bin_mmr_new(ibin + 1) = bin_mmr_new(ibin + 1) + (1._r8 - xfrac) * bin_mmr_old(ibin)
+        bin_mmr_new(ibin)     = bin_mmr_new(ibin)     + fraction_remaining * bin_mmr_old(ibin)
+        bin_mmr_new(ibin + 1) = bin_mmr_new(ibin + 1) + (1._r8 - fraction_remaining) * bin_mmr_old(ibin)
     end do
 
-    ! Aerosol cannot leave the largest bin
+    ! Aerosol cannot leave the largest bin -> keep it in there
     ibin = aero_props%nbins()
     bin_numconc_new(ibin) = bin_numconc_new(ibin) + bin_numconc_old(ibin)
     bin_mmr_new(ibin) = bin_mmr_new(ibin) + bin_mmr_old(ibin)
@@ -1127,8 +1129,8 @@ contains
             !-- Lehtinen 2007 parameterization for apparent formation rate
             !   diameters in nm, growth rate in nm h-1, coagulation in s-1
             ! get formation rate: rate of formation of particles with smallest model bin radius #/cm3/s
-            call appformrate(nuclsize_bin(i,k), radius*2.E9_r8, nuclrate_bin(i,k), formrate_bin(i,k), coagnuc(i,k), gr(i,k))
-            call appformrate(nuclsize_pbl(i,k), radius*2.E9_r8, nuclrate_pbl(i,k), formrate_pbl(i,k), coagnuc(i,k), gr(i,k))
+            call apparent_formation_rate(nuclsize_bin(i,k), radius*2.E9_r8, nuclrate_bin(i,k), formrate_bin(i,k), coagnuc(i,k), gr(i,k))
+            call apparent_formation_rate(nuclsize_pbl(i,k), radius*2.E9_r8, nuclrate_pbl(i,k), formrate_pbl(i,k), coagnuc(i,k), gr(i,k))
 
             formrate_bin(i,k)=MAX(MIN(formrate_bin(i,k),1.E3_r8),0._r8)
             formrate_pbl(i,k)=MAX(MIN(formrate_pbl(i,k),1.E3_r8),0._r8)
@@ -1171,8 +1173,8 @@ contains
 ! from nucleation rate of particles of size d1
 !==========================================================================================
 
-   subroutine appformrate(d1, dx, j1, jx, CoagS_dx, gr)
-      !-- appformrate calculates the formation rate jx of dx sized particles from the nucleation rate j1 (d1 sized particles)
+   subroutine apparent_formation_rate(d1, dx, j1, jx, CoagS_dx, gr)
+      !-- apparent_formation_rate calculates the formation rate jx of dx sized particles from the nucleation rate j1 (d1 sized particles)
       !-- Formation rate is parameterized according to Lehtinen et al. (2007), JAS 38:988-994
       !-- Parameterization takes into account the loss of particles due to coagulation
       !-- Growth by self-coagulation is not accounted for
@@ -1200,16 +1202,16 @@ contains
       !-- (Eq. 6) Exponent m, depends on background distribution
       ! m=log(CoagS_dx/CoagS_d1)/log(dx/d1)
       ! Or, if we dont want to calculate CoagS_d1, lets assume a typical value for m (-1.5 -- -1.9) and calculate CoagS_d1 from Eq.5
-      m=-1.6_r8
-      CoagS_d1=CoagS_dx*(d1/dx)**m
-      CoagS_d1=MAX(MIN(CoagS_d1,1.E2_r8),1.E-10_r8)
+      m = -1.6_r8
+      CoagS_d1 = CoagS_dx * (d1/dx)**m
+      CoagS_d1 = MAX( MIN( CoagS_d1, 1.E2_r8 ), 1.E-10_r8 )
 
-      gamma=(1._r8/(m+1._r8))*((dx/d1)**(m+1._r8)-1._r8)
-      gamma=MAX(MIN(gamma,1.E2_r8),1.E-10_r8)
+      gamma = ( 1._r8 / (m+1._r8) ) * ( (dx/d1)**(m+1._r8) - 1._r8 )
+      gamma = MAX( MIN( gamma, 1.E2_r8 ), 1.E-10_r8 )
 
       !-- (Eq. 7) CoagS_d1 is multiplied with 3600 to get units h-1
-      jx=j1*exp(-gamma*d1*CoagS_d1*3600._r8/gr)
+      jx = j1 * exp(-gamma*d1*CoagS_d1*3600._r8 / gr)
 
-   end subroutine appformrate
+   end subroutine apparent_formation_rate
 
 end module condtend
