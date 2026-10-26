@@ -4,34 +4,31 @@ module condtend
 ! script adapted from OsloAeroSec condtend.F90 and aeronucl.F90 by smb
 !
 ! TODO: make copy of state for substepping
-! TODO: currently stuck in an infinite while loop
 ! TODO: get rid of: use aero_sectional,     only: secConstIndex index for aerosol in q array
-! TODO: get rid of chemistryindex -> find physics index, then - imozart
+! TODO: get rid of chemistryindex -> find physics index, then - imozart ( chemistryindex = phys_index - imozart + 1 )
 ! TODO: re-implement organics.. somehow :P
-! TODO: add new mass for SO4 to aero_state%aero_range_state(1)%mmr(:,:,SO4)
-! TODO: add condensate to aero_state%aero_range_state(:)%mmr(:,:,SO4)
 ! TODO: make sure unit of bin_mmr is correct, in kg/kg, not number concentration
 ! TODO: make diagnostic output, addfld and outfld for nucleation and condensation tendencies
 ! TODO: verify all the calculations, this is just a quick cleanup of the osloaerosec version, and I have not checked the physics yet.
 ! TODO: check for unused variables, and remove them
 ! TODO: make an attribute in aerosol properties for the precursor gas, and de CAM-ify the code, so that it is not hardcoded to H2SO4
-! GOOD LUCK!
   ! CAM/NorESM specific stuff
+
    use phys_control, only: phys_getopts
    use chem_mods,    only: gas_pcnst
    use mo_tracname,  only: solsym
    use shr_kind_mod, only: r8 => shr_kind_r8
    use cam_history,  only: outfld, addfld, add_default, fieldname_len, horiz_only
    use physconst,    only: rair, gravit, pi
-   use chem_mods,    only: adv_mass !molecular weights from mozart
+   use chem_mods,    only: adv_mass             ! molecular weights from mozart
    use ppgrid,       only: pcols, pver, pverp
    use constituents, only: cnst_get_ind
    use spmd_utils,   only: masterproc
 
    ! Sectional aerosol specific stuff
-   use aerosol_properties_mod,           only: aerosol_properties
-   use fanci_aerosol_properties_mod,     only: fanci_aerosol_properties
-   use aerosol_state_mod,                only: aerosol_state, ptr2d_t
+   use aerosol_properties_mod,       only: aerosol_properties
+   use fanci_aerosol_properties_mod, only: fanci_aerosol_properties
+   use aerosol_state_mod,            only: aerosol_state, ptr2d_t
    use fanci_aerosol_state_mod,      only: fanci_aerosol_state
 
    implicit none
@@ -98,10 +95,11 @@ contains
 
       ! local variables for output
       logical  :: history_aerosol
-!      character(len=fieldname_len+3) :: fieldname_donor
-!      character(len=fieldname_len+3) :: fieldname_receiver
-!      character(128)                 :: long_name
-!      character(8)                   :: unit
+      character(len=fieldname_len+3) :: fieldname_donor
+      character(len=fieldname_len+3) :: fieldname_receiver
+      character(128)                 :: long_name
+      character(8)                   :: unit
+      integer  :: iChem
 
       !-----------------------------------------------------------------------------------
 
@@ -180,11 +178,24 @@ contains
                                        * bin_centers(ibin)                     ! [m] radius of bin
       end do
 
-      !Initialize output
+      ! Initialize output
       call phys_getopts(history_aerosol_out = history_aerosol)
 
-! TODO: addflds
 ! condensation tendency for SO4_R1, maybe num_1, ...
+    !Need to add so4_a1, soa_na, so4_na, soa_a1 also (which are not parts of the donor-receiver stuff)
+    !aero_state%state%q(:ncol,:pver, aero_state%num_transport_ndx(ibin)) = &
+    !aero_state%state%q(:ncol,:pver, aero_state%aero_range_state(irange)%transport_ndx(:)) = &
+
+    ! TODO: should this be "nucleation tendency?"
+    call addfld( 'num_1_condTend', horiz_only, 'A', "1/kg/s", "condensation/nucleation tendency of number in bin 1")
+    if(history_aerosol)then
+       call add_default( 'num_1_condTend', 1, ' ' )
+    end if
+
+    call addfld( 'SO4_R1_condTend', horiz_only, 'A', "kg/kg/s" , "condensation/nucleation tendency of SO4 mmr in range R1" )
+    if(history_aerosol)then
+       call add_default( 'SO4_R1_condTend', 1, ' ' )
+    end if
 
    end subroutine condensation_init
 
