@@ -185,7 +185,7 @@ contains
     ! TODO: for future maybe only add fields for the smallest bin/range
     do ibin = 1, aero_props%nbins()
         fldname = 'num'//trim(int2str(ibin))//'_condTend'
-        call addfld( trim(fldname), horiz_only, 'A', "1/kg/s", "condensation/nucleation tendency of number in bin "//trim(int2str(ibin)))
+        call addfld( trim(fldname), horiz_only, 'A', "1/kg/s", "condensation tendency of number in bin "//trim(int2str(ibin)))
         if(history_aerosol)then
             call add_default( trim(fldname), 1, ' ' )
         end if
@@ -194,7 +194,7 @@ contains
     do irange = 1, aero_props%nranges()
         ! Currently only for sulfate!
         fldname = 'SO4_R'//trim(int2str(irange))
-        call addfld( trim(fldname)//'_condTend', horiz_only, 'A', "kg/kg/s" , "condensation/nucleation tendency of SO4 mmr in range R"//trim(int2str(irange)) )
+        call addfld( trim(fldname)//'_condTend', horiz_only, 'A', "kg/kg/s" , "condensation tendency of SO4 mmr in range R"//trim(int2str(irange)) )
         if(history_aerosol)then
            call add_default( trim(fldname)//'_condTend', 1, ' ' )
         end if
@@ -241,7 +241,7 @@ contains
 
       real(r8) :: rho_air(pcols,pver)                  ! [kg/m3] density of air
       real(r8) :: dt_substep
-      real(r8) :: substep_output(pcols, gas_pcnst)
+      real(r8) :: substep_coltend(pcols, gas_pcnst)
 
       real(r8), allocatable :: q_initial(:,:,:)      ! mass before subroutine.
       real(r8), allocatable :: bin_numconc_initial(:,:,:)
@@ -249,7 +249,7 @@ contains
       real(r8), pointer     :: tmp_num(:,:)
 
       !output:
-      real(r8) :: coltend (pcols, gas_pcnst)      ! ??
+      real(r8) :: coltend (pcols, gas_pcnst)      ! column tendency TODO: implement this somehow..
 
       real(r8) :: nuclrate_accum(pcols,pver)      ! [kg/kg] tracer lost
       real(r8) :: nuclrate_accum_pbl(pcols,pver)  ! [kg/kg] tracer lost
@@ -257,7 +257,7 @@ contains
       real(r8) :: formrate_accum_pbl(pcols,pver)  ! [kg/kg] tracer lost
       real(r8) :: h2so4nucl(pcols,pver)           ! h2so4 in nucleation code
       real(r8) :: growth_rate_h2so4(pcols,pver)   ! growth rate h2so4
-      real(r8) :: coag_sink_nucl(pcols,pver)            ! coagulation in nucleation
+      real(r8) :: coag_sink_nucl(pcols,pver)      ! coagulation in nucleation
       real(r8) :: nuclnum_tend(pcols,pver)        ! [#/m3/s] nucleation number rate from RM's parameterization
 
       integer  :: ibin, irange ! index for bin and range
@@ -291,6 +291,7 @@ contains
 
       nucleated_numconc_added = 0._r8
 
+      ! TODO: find air density somewhere else?
       rho_air(:ncol, :) = pmid(:ncol,:) / (rair * temperature(:ncol,:))
 
       q_initial(:ncol,:,:) = q(:ncol,:,:)
@@ -327,20 +328,21 @@ contains
          split_dt = .false.
 
          do isubstep = 1, nsubsteps
-            substep_output(:,:) = 0._r8
+            substep_coltend(:,:) = 0._r8
 
            ! run until no need to split time any longer
            call condtend_substep(lchnk, q, cond_vap_gasprod, temperature, &
                            nuclrate_accum, nuclrate_accum_pbl, &
                            formrate_accum, formrate_accum_pbl, coag_sink_nucl, &
                            h2so4nucl, growth_rate_h2so4, &
-                           substep_output, split_dt, &
+                           substep_coltend, split_dt, &
                            pmid, pdel, dt_substep, ncol, pblh, zm, qh20, &
                            aero_props, aero_state, bin_numconc_new, nuclnum_tend)
 
+           coltend = coltend + substep_coltend * dt_substep
+
            if (split_dt) then
            ! we need to increase the number of substeps
-
               exit
            end if
 
@@ -362,6 +364,7 @@ contains
      ! update aerosol_state
      ! numconc #/m3-air back to num mixing ratio #/kg-air.
      do ibin = 1, aero_props%nbins()
+        ! TODO: put in the actual state or in the copy?
         aero_state%state%q(:ncol,:pver,aero_state%num_transport_ndx(ibin)) = &
                    bin_numconc_new(:ncol,:,ibin) / rho_air(:ncol,:)
      end do
@@ -378,6 +381,7 @@ contains
 
      ! Accumulated values for diagnostics * substep duration.
      ! Divide by the full timestep -> avg for dt
+! TODO: it is "accumulated" first, and now divided by dt -> divide for the output to make it less confusing
      nuclrate_accum     = nuclrate_accum     / dt
      nuclrate_accum_pbl = nuclrate_accum_pbl / dt
      formrate_accum     = formrate_accum     / dt
@@ -386,7 +390,6 @@ contains
      growth_rate_h2so4  = growth_rate_h2so4  / dt
      coag_sink_nucl     = coag_sink_nucl     / dt
 
-               ! update bin with numconc from nucleation
 ! TODO: add nucleation
 ! TODO: add ranges
 
@@ -397,9 +400,6 @@ contains
          do ibin = 1, aero_props%nbins()
             fieldname = 'num_'//trim(aero_props%bin_name(ibin))//'_condTend'
             call outfld(fieldname, coltend(:ncol, aero_state%num_transport_ndx(ibin)-imozart), pcols, lchnk)
-
-    !aero_state%state%q(:ncol,:pver, aero_state%num_transport_ndx(ibin)) = &
-    !aero_state%state%q(:ncol,:pver, aero_state%aero_range_state(irange)%transport_ndx(:)) = &
          end do
 
          do irange = 1, aero_props%nranges()
@@ -523,6 +523,7 @@ contains
        allocate(rho_aerosol(ncol,pver,aero_props%nbins()))
        allocate(tend(ncol, pver, gas_pcnst))
        !Initialize h2so4 and soa nucl variables
+! TODO: coagulationSink is just 0 so far
        coagulationSink = 0.0_r8
        bin_condensation_fraction = 0.0_r8
        bin_numconc_old = 0.0_r8
@@ -625,6 +626,7 @@ contains
              !First order loss rate (1/s) for nucleation
               !smb++ added check for 0
               if (h2so4_mmr_tmp(i,k) .eq. 0) then
+                ! If 0, we are not losing any H2SO4 to nucleation
                   firstOrderLossRateNucl(i,k)=0._r8
               else
                   firstOrderLossRateNucl(i,k) = nuclso4_tend(i,k)/h2so4_mmr_tmp(i,k)
