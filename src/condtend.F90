@@ -95,11 +95,7 @@ contains
 
       ! local variables for output
       logical  :: history_aerosol
-      character(len=fieldname_len+3) :: fieldname_donor
-      character(len=fieldname_len+3) :: fieldname_receiver
-      character(128)                 :: long_name
-      character(8)                   :: unit
-      integer  :: iChem
+      character(128)                 :: fldname
 
       !-----------------------------------------------------------------------------------
 
@@ -186,28 +182,35 @@ contains
     !aero_state%state%q(:ncol,:pver, aero_state%num_transport_ndx(ibin)) = &
     !aero_state%state%q(:ncol,:pver, aero_state%aero_range_state(irange)%transport_ndx(:)) = &
 
-    ! TODO: should this be "nucleation tendency?"
-    call addfld( 'num_1_condTend', horiz_only, 'A', "1/kg/s", "condensation/nucleation tendency of number in bin 1")
-    if(history_aerosol)then
-       call add_default( 'num_1_condTend', 1, ' ' )
-    end if
+    ! TODO: for future maybe only add fields for the smallest bin/range
+    do ibin = 1, aero_props%nbins()
+        fldname = 'num'//trim(int2str(ibin))//'_condTend'
+        call addfld( trim(fldname), horiz_only, 'A', "1/kg/s", "condensation/nucleation tendency of number in bin "//trim(int2str(ibin)))
+        if(history_aerosol)then
+            call add_default( trim(fldname), 1, ' ' )
+        end if
+    end do
 
-    call addfld( 'SO4_R1_condTend', horiz_only, 'A', "kg/kg/s" , "condensation/nucleation tendency of SO4 mmr in range R1" )
-    if(history_aerosol)then
-       call add_default( 'SO4_R1_condTend', 1, ' ' )
-    end if
+    do irange = 1, aero_props%nranges()
+        ! Currently only for sulfate!
+        fldname = 'SO4_R'//trim(int2str(irange))
+        call addfld( trim(fldname)//'_condTend', horiz_only, 'A', "kg/kg/s" , "condensation/nucleation tendency of SO4 mmr in range R"//trim(int2str(irange)) )
+        if(history_aerosol)then
+           call add_default( trim(fldname)//'_condTend', 1, ' ' )
+        end if
+    end do
 
    end subroutine condensation_init
 
 !==========================================================================================
 ! Condensation + Nucleation called from aero_model
-! manages time sub-stepping by calling compute_condtend_substep
+! manages time sub-stepping by calling condtend_substep
 !==========================================================================================
 
    subroutine advance_aero_condtend(lchnk, q, cond_vap_gasprod, temperature, &
                pmid, pdel, dt, ncol, pblh, zm, qh20, aero_props, aero_state)
       ! Outer driver for aerosol condensation and nucleation processes
-      !    Calls compute_condtend_substep, retries if substep is too large
+      !    Calls condtend_substep, retries if substep is too large
       ! Calculates nucleation rate and condensation rate of aerosols
       ! Accumulates tendencies and updates aerosol_state
 ! TODO: bin_numconc_new is modified but update_bin passes delmmr_sum=0 and tnd_ndx = 0
@@ -327,7 +330,7 @@ contains
             substep_output(:,:) = 0._r8
 
            ! run until no need to split time any longer
-           call compute_condtend_substep(lchnk, q, cond_vap_gasprod, temperature, &
+           call condtend_substep(lchnk, q, cond_vap_gasprod, temperature, &
                            nuclrate_accum, nuclrate_accum_pbl, &
                            formrate_accum, formrate_accum_pbl, coag_sink_nucl, &
                            h2so4nucl, growth_rate_h2so4, &
@@ -389,8 +392,21 @@ contains
 
       call phys_getopts(history_aerosol_out = history_aerosol)
 
- !     if(history_aerosol)then
-! TODO: more nice output
+      if(history_aerosol)then
+      ! Write output
+         do ibin = 1, aero_props%nbins()
+            fieldname = 'num_'//trim(aero_props%bin_name(ibin))//'_condTend'
+            call outfld(fieldname, coltend(:ncol, aero_state%num_transport_ndx(ibin)-imozart), pcols, lchnk)
+
+    !aero_state%state%q(:ncol,:pver, aero_state%num_transport_ndx(ibin)) = &
+    !aero_state%state%q(:ncol,:pver, aero_state%aero_range_state(irange)%transport_ndx(:)) = &
+         end do
+
+         do irange = 1, aero_props%nranges()
+            fldname = 'SO4_R'//trim(aero_props%range_name(irange))//'_condTend'
+            call outfld(fldname, coltend(:ncol, aero_state%aero_range_state(irange)%transport_ndx(sulfate_specprop_ndx)-imozart), pcols, lchnk)
+         end do
+      end if
 
       deallocate(bin_numconc_initial, bin_numconc)
 
@@ -416,7 +432,7 @@ contains
 ! 8. Adds newly formed particles to the smallest bin.
 !==========================================================================================
 
-   subroutine compute_condtend_substep(lchnk,  q, cond_vap_gasprod, temperature,            &
+   subroutine condtend_substep(lchnk,  q, cond_vap_gasprod, temperature,            &
                 nuclrate_accum, nuclrate_accum_pbl_o, formrate_accum, formrate_accum_pbl_o, coagnucl_o,  &
                 h2so4nucl_o, growth_rate_h2so4_o,                     &
                 coltend_o, split_dt,                                            &
@@ -731,7 +747,7 @@ contains
 !       endif
 
 
-   end subroutine compute_condtend_substep
+   end subroutine condtend_substep
 
 !==========================================================================================
 ! Helper routine to move mass between bins from growth
