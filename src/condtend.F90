@@ -15,15 +15,12 @@ module condtend
   ! CAM/NorESM specific stuff
 
    use phys_control, only: phys_getopts
-   use chem_mods,    only: gas_pcnst
-   use mo_tracname,  only: solsym
+   use chem_mods,    only: gas_pcnst, adv_mass             ! molecular weights from mozart
    use shr_kind_mod, only: r8 => shr_kind_r8
    use cam_history,  only: outfld, addfld, add_default, fieldname_len, horiz_only
-   use physconst,    only: rair, gravit, pi
-   use chem_mods,    only: adv_mass             ! molecular weights from mozart
-   use ppgrid,       only: pcols, pver, pverp
-   use constituents, only: cnst_get_ind
-   use spmd_utils,   only: masterproc
+   use physconst,    only: rair, gravit, pi, avogad
+   use ppgrid,       only: pcols, pver !, pverp
+   use constituents, only: pcnst
 
    ! Sectional aerosol specific stuff
    use aerosol_properties_mod,       only: aerosol_properties
@@ -63,6 +60,8 @@ contains
       ! condensation coefficients:
       ! Theory: Poling et al, "The properties of gases and liquids"
       ! 5th edition, eqn 11-4-4
+      use mo_tracname,  only: solsym
+      use constituents, only: cnst_get_ind, pcnst
 
       ! dummy arguments
       type(fanci_aerosol_properties), intent(in) :: aero_props
@@ -80,7 +79,7 @@ contains
       real(r8), parameter :: vad     = 51.96_r8       ![cm3/mol]
       real(r8), parameter :: vadAir  = 19.7_r8        ![cm3/mol]
       real(r8), parameter :: one_third  = 1.0_r8/3.0_r8
-      real(r8), parameter :: cm2_to_m2 = 1.e-4_r8       ! convert from cm2 ==> m2
+      real(r8), parameter :: cm2_to_m2 = 1.e-4_r8     ! convert from cm2 ==> m2
 
       ! local variables
       real(r8), allocatable :: diffusion_coeff_bin(:)          ! [m2/s] Diffusion coefficient sectional
@@ -219,8 +218,6 @@ contains
       ! This method also writes output once condend is done.
 
       use cam_abortutils, only: endrun
-      use cam_history,    only: outfld,fieldname_len
-      use constituents,   only: pcnst  ! h2so4 and soa nucleation (cka)
 
       ! dummy arguments
       type(fanci_aerosol_properties), intent(in) :: aero_props
@@ -438,9 +435,6 @@ contains
                 coltend_o, split_dt,                                            &
                 pmid, pdel, dt, ncol, pblh,zm,qh20,                              &
                 aero_props, aero_state, bin_numconc_new, nuclnum_tend)
-
-      use cam_history,     only: outfld,fieldname_len
-      use constituents,    only: pcnst
 
       ! dummy arguments
       type(fanci_aerosol_properties), intent(in) :: aero_props
@@ -836,13 +830,7 @@ contains
                 h2so4nucl_o, growth_rate_h2so4_o, dt, &
                 target_particle_radius, aero_props)
 
-    use shr_kind_mod,   only: r8 => shr_kind_r8
     use wv_saturation,  only: qsat_water
-    use physconst,      only: avogad, rair
-    use ppgrid,         only: pcols, pver, pverp
-    use cam_history,    only: outfld
-    use phys_control,   only: phys_getopts
-    use chem_mods,      only: adv_mass
     use m_spc_id,       only: id_H2SO4
     use shr_const_mod,  only: shr_const_rgas
 
