@@ -580,6 +580,7 @@ contains
   end subroutine icenuc_type_wght
 
   !------------------------------------------------------------------------------
+  ! updates state and tendency
   !------------------------------------------------------------------------------
   subroutine update_bin( self, bin_ndx, col_ndx, lyr_ndx, delmmr_sum, delnum_sum, tnd_ndx, dtime, tend )
     class(fanci_aerosol_state), intent(inout) :: self
@@ -593,16 +594,17 @@ contains
     real(r8),intent(inout) :: tend(:,:,:)         ! tendency
 
     character(len=*), parameter :: subname = 'update_bin'
+! Update tend(col_ndx, lyr_ndx, tnd_ndx) with delmmr_sum and delnum_sum for the given bin
 
-! TODO: fix this for ranges
-! currently a copy of modal
-    if (tnd_ndx > 0) then
-       ! tend(col_ndx, lyr_ndx, tnd_ndx) = - delnum_sum/dtime
+    range_ndx = self%sec_aero_props%bins2ranges(bin_ndx)
+
+    if ( tend_ndx == self%num_transport_ndx(bin_ndx) ) then
        tend(col_ndx,lyr_ndx,tnd_ndx) = -delnum_sum/dtime
-    else
-        self%state%q(col_ndx,lyr_ndx,self%num_transport_ndx(bin_ndx)) = &
-               self%state%q(col_ndx,lyr_ndx,self%num_transport_ndx(bin_ndx)) - delmmr_sum
+    else if ( tend_ndx == self%aero_range_state(range_ndx)%transport_ndx())
+       amb_num(col_ndx,lyr_ndx) = amb_num(col_ndx,lyr_ndx) - delnum_sum
     end if
+
+
 
 ! update range
     ! bin_num(bin_ndx) = bin_num + tendency

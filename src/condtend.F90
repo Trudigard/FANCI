@@ -20,7 +20,6 @@ module condtend
    use cam_history,  only: outfld, addfld, add_default, fieldname_len, horiz_only
    use physconst,    only: rair, gravit, pi, avogad
    use ppgrid,       only: pcols, pver !, pverp
-   use constituents, only: pcnst
 
    ! Sectional aerosol specific stuff
    use aerosol_properties_mod,       only: aerosol_properties
@@ -37,7 +36,7 @@ module condtend
    private
 
    ! module variables
-   real(r8), allocatable :: condsink_per_particle(:) ! [m3/#/s] condensation sink per particle in bin i
+   real(r8), allocatable :: condsink_per_particle(:) ! [m3/#/s] condensation sink per particle in bin i formerly normalizedcondensationsink
    real(r8), allocatable :: bin_centers(:)           ! [m] bin centers
    integer  :: l_h2so4_chem                          ! index for H2SO4 in chemical mechanism
    integer  :: imozart                               ! index shift for MOZART chemistry species
@@ -61,7 +60,7 @@ contains
       ! Theory: Poling et al, "The properties of gases and liquids"
       ! 5th edition, eqn 11-4-4
       use mo_tracname,  only: solsym
-      use constituents, only: cnst_get_ind, pcnst
+      use constituents, only: cnst_get_ind
 
       ! dummy arguments
       type(fanci_aerosol_properties), intent(in) :: aero_props
@@ -82,19 +81,19 @@ contains
       real(r8), parameter :: cm2_to_m2 = 1.e-4_r8     ! convert from cm2 ==> m2
 
       ! local variables
-      real(r8), allocatable :: diffusion_coeff_bin(:)          ! [m2/s] Diffusion coefficient sectional
+      real(r8), allocatable :: diffusion_coeff_bin(:) ! [m2/s] Diffusion coefficient sectional
 
-      real(r8) :: mean_free_path  ! [m] mean free path
-      real(r8) :: diffusion_coeff_vap  ! [m2/s] diffusion coefficient for cond. vap (vapor?)
-      real(r8) :: Mdual           ! [molec/amu] 1/M_1 + 1/M_2
-      real(r8) :: r_molecule      ! [m] radius molecule
-      real(r8) :: thermal_vel     ! [m/s] thermal velocity
-      integer  :: ibin, ispecprop ! indexes for loops
-      character(len=16) :: type   ! type of species in aero_props
+      real(r8) :: mean_free_path      ! [m] mean free path
+      real(r8) :: diffusion_coeff_vap ! [m2/s] diffusion coefficient for cond. vap (vapor?)
+      real(r8) :: Mdual               ! [molec/amu] 1/M_1 + 1/M_2
+      real(r8) :: r_molecule          ! [m] radius molecule
+      real(r8) :: thermal_vel         ! [m/s] thermal velocity
+      integer  :: ibin, ispecprop, irange ! indexes for loops
+      character(len=16) :: type       ! type of species in aero_props
 
       ! local variables for output
-      logical  :: history_aerosol
-      character(128)                 :: fldname
+      logical        :: history_aerosol
+      character(128) :: fldname
 
       !-----------------------------------------------------------------------------------
 
@@ -176,28 +175,28 @@ contains
       ! Initialize output
       call phys_getopts(history_aerosol_out = history_aerosol)
 
-! condensation tendency for SO4_R1, maybe num_1, ...
-    !Need to add so4_a1, soa_na, so4_na, soa_a1 also (which are not parts of the donor-receiver stuff)
-    !aero_state%state%q(:ncol,:pver, aero_state%num_transport_ndx(ibin)) = &
-    !aero_state%state%q(:ncol,:pver, aero_state%aero_range_state(irange)%transport_ndx(:)) = &
+      ! condensation tendency for SO4_R1, maybe num_1, ...
+      ! Need to add so4_a1, soa_na, so4_na, soa_a1 also (which are not parts of the donor-receiver stuff)
+      ! aero_state%state%q(:ncol,:pver, aero_state%num_transport_ndx(ibin)) = &
+      ! aero_state%state%q(:ncol,:pver, aero_state%aero_range_state(irange)%transport_ndx(:)) = &
 
-    ! TODO: for future maybe only add fields for the smallest bin/range
-    do ibin = 1, aero_props%nbins()
-        fldname = 'num'//trim(int2str(ibin))//'_condTend'
-        call addfld( trim(fldname), horiz_only, 'A', "1/kg/s", "condensation tendency of number in bin "//trim(int2str(ibin)))
-        if(history_aerosol)then
+      ! TODO: for future maybe only add fields for the smallest bin/range
+      do ibin = 1, aero_props%nbins()
+         fldname = 'num'//trim(int2str(ibin))//'_condTend'
+         call addfld( trim(fldname), horiz_only, 'A', "1/kg/s", "condensation tendency of number in bin "//trim(int2str(ibin)))
+         if(history_aerosol)then
             call add_default( trim(fldname), 1, ' ' )
-        end if
-    end do
+         end if
+      end do
 
-    do irange = 1, aero_props%nranges()
-        ! Currently only for sulfate!
-        fldname = 'SO4_R'//trim(int2str(irange))
-        call addfld( trim(fldname)//'_condTend', horiz_only, 'A', "kg/kg/s" , "condensation tendency of SO4 mmr in range R"//trim(int2str(irange)) )
-        if(history_aerosol)then
-           call add_default( trim(fldname)//'_condTend', 1, ' ' )
-        end if
-    end do
+      do irange = 1, aero_props%nranges()
+         ! Currently only for sulfate!
+         fldname = 'SO4_R'//trim(int2str(irange))
+         call addfld( trim(fldname)//'_condTend', horiz_only, 'A', "kg/kg/s" , "condensation tendency of SO4 mmr in range R"//trim(int2str(irange)) )
+         if(history_aerosol)then
+            call add_default( trim(fldname)//'_condTend', 1, ' ' )
+         end if
+      end do
 
    end subroutine condensation_init
 
@@ -240,10 +239,18 @@ contains
       real(r8) :: dt_substep
       real(r8) :: substep_coltend(pcols, gas_pcnst)
 
-      real(r8), allocatable :: q_initial(:,:,:)      ! mass before subroutine.
+      real(r8), allocatable :: q_initial(:,:,:)        ! mass before subroutine.
       real(r8), allocatable :: bin_numconc_initial(:,:,:)
       real(r8), allocatable :: bin_numconc_new(:,:,:)  ! [#/m3] number concentration new
+      real(r8), allocatable :: bin_numconc_old(:,:,:)  ! snapshot of number concentration before substep
+      real(r8), allocatable :: range_mmr_new(:,:,:)    ! mass in each range after growth, summed over bins in a range (kg/kg_air)
       real(r8), pointer     :: tmp_num(:,:)
+      real(r8), allocatable :: bin_mmr_initial(:,:,:)
+      real(r8), allocatable :: bin_mmr_state(:,:,:)
+
+      ! for substepping
+      real(r8), allocatable :: bin_condensation_fraction(:,:,:)
+      real(r8), allocatable :: rho_aerosol(:,:,:)
 
       !output:
       real(r8) :: coltend (pcols, gas_pcnst)      ! column tendency TODO: implement this somehow..
@@ -262,17 +269,17 @@ contains
       integer  :: nsubsteps, isubstep
 
       ! aero props for sulfate
-      real(r8), allocatable :: nucleated_numconc_added(:,:,:)
+!      real(r8), allocatable :: nucleated_numconc_added(:,:,:)
       real(r8), allocatable :: range_mmr_tend(:,:,:)
       real(r8) :: sulfate_density
-      integer :: sulfate_range_species_ndx
-      integer :: nrange_species
-      integer :: ispec
+      integer  :: sulfate_range_species_ndx
+      integer  :: nrange_species
+      integer  :: ispec
 
       ! local variables for output
-      logical                        :: history_aerosol
-!      character(128)                 :: long_name
-!      character(8)                   :: unit
+      logical :: history_aerosol
+      character(len=fieldname_len+3) :: fieldname
+
 !      character(18) :: fieldname_receiver
 
       !-----------------------------------------------------------------------------------
@@ -284,15 +291,23 @@ contains
       allocate(q_initial(ncol, size(q,2), size(q,3)))
       allocate(bin_numconc_initial(ncol, pver, aero_props%nbins()))
       allocate(bin_numconc_new(ncol, pver, aero_props%nbins()))
-      allocate(nucleated_numconc_added(ncol, pver, aero_props%nbins()))
+      allocate(bin_numconc_old(ncol, pver, aero_props%nbins()))
+      allocate(range_mmr_new(ncol, pver, aero_props%nranges()))
+!      allocate(nucleated_numconc_added(ncol, pver, aero_props%nbins()))
+      allocate(rho_aerosol(ncol, pver, aero_props%nbins()))
+      allocate(bin_condensation_fraction(ncol, pver, aero_props%nbins()))
+      allocate(bin_mmr_initial(ncol, pver, aero_props%nbins()))
+      allocate(bin_mmr_state(ncol, pver, aero_props%nbins()))
 
-      nucleated_numconc_added = 0._r8
+      range_mmr_new = 0._r8
+      bin_numconc_new = 0._r8
+ !     nucleated_numconc_added = 0._r8
+      bin_mmr_initial = 0._r8
+      bin_mmr_state = 0._r8
 
       ! TODO: find air density somewhere else?
       rho_air(:ncol, :) = pmid(:ncol,:) / (rair * temperature(:ncol,:))
-
       q_initial(:ncol,:,:) = q(:ncol,:,:)
-
       sulfate_density = aero_props%density(sulfate_specprop_ndx)
 
       nullify(tmp_num)
@@ -301,6 +316,9 @@ contains
          call aero_state%get_ambient_num(ibin, tmp_num)
          bin_numconc_initial(:,:,ibin) = tmp_num(:,:) * rho_air(:,:)
          nullify(tmp_num)
+         rho_aerosol(:,:,ibin) = aero_state%bin_dry_density(ibin, ncol)
+         ! TODO: this is currently only for sulfate! -> represents sulfate mmr in a bin
+         call aero_state%get_ambient_mmr(sulfate_specprop_ndx, ibin, bin_mmr_initial(:,:,ibin))
       end do
 
       nsubsteps = 2
@@ -310,9 +328,12 @@ contains
             call endrun('advance_aero_condtend: exceeded maximum number of substeps')
          end if
 
+         coltend = 0._r8
          q(:ncol,:,:) = q_initial(:ncol,:,:)
          bin_numconc_new = bin_numconc_initial
+         bin_mmr_state = bin_mmr_initial
 
+         ! reset accumulators for this substep
          nuclrate_accum_pbl(:,:) = 0.0_r8
          nuclrate_accum(:,:)     = 0.0_r8
          formrate_accum_pbl(:,:) = 0.0_r8
@@ -327,21 +348,21 @@ contains
          do isubstep = 1, nsubsteps
             substep_coltend(:,:) = 0._r8
 
-           ! run until no need to split time any longer
-           call condtend_substep(lchnk, q, cond_vap_gasprod, temperature, &
+            ! run until no need to split time any longer
+            call condtend_substep(lchnk, q, cond_vap_gasprod, temperature, &
                            nuclrate_accum, nuclrate_accum_pbl, &
                            formrate_accum, formrate_accum_pbl, coag_sink_nucl, &
                            h2so4nucl, growth_rate_h2so4, &
                            substep_coltend, split_dt, &
                            pmid, pdel, dt_substep, ncol, pblh, zm, qh20, &
-                           aero_props, aero_state, bin_numconc_new, nuclnum_tend)
+                           aero_props, aero_state, bin_numconc_new, nuclnum_tend, range_mmr_new, rho_air, bin_numconc_old, rho_aerosol, bin_condensation_fraction, bin_mmr_state)
 
-           coltend = coltend + substep_coltend * dt_substep
+            coltend = coltend + substep_coltend * dt_substep
 
-           if (split_dt) then
-           ! we need to increase the number of substeps
-              exit
-           end if
+            if (split_dt) then
+            ! we need to increase the number of substeps
+               exit
+            end if
 
          end do
 
@@ -358,34 +379,29 @@ contains
 
       end do
 
-     ! update aerosol_state
-     ! numconc #/m3-air back to num mixing ratio #/kg-air.
-     do ibin = 1, aero_props%nbins()
-        ! TODO: put in the actual state or in the copy?
-        aero_state%state%q(:ncol,:pver,aero_state%num_transport_ndx(ibin)) = &
+      ! update aerosol_state
+      ! numconc #/m3-air back to num mixing ratio #/kg-air.
+      do ibin = 1, aero_props%nbins()
+         ! TODO: put in the actual state or in the copy?
+         ! Use update_bin?
+         aero_state%state%q(:ncol,:pver,aero_state%num_transport_ndx(ibin)) = &
                    bin_numconc_new(:ncol,:,ibin) / rho_air(:ncol,:)
-     end do
+      end do
 
-     do irange = 1, aero_props%nranges()
+      do irange = 1, aero_props%nranges()
+         aero_state%aero_range_state(irange)%mmr(:ncol,:) = range_mmr_new(:ncol,:,irange)
+      end do
 
-   ! TODO: use update_bin:
-                   !do i = 1, ncol
-                   !do k = 1, pver
-                   !    call aero_state%update_bin(1, i, k, 0._r8, -nuclnum_tend(i,k)*dt, 0, dt, tend)
-                   !end do
-                !end do
-     end do
-
-     ! Accumulated values for diagnostics * substep duration.
-     ! Divide by the full timestep -> avg for dt
+      ! Accumulated values for diagnostics * substep duration.
+      ! Divide by the full timestep -> avg for dt
 ! TODO: it is "accumulated" first, and now divided by dt -> divide for the output to make it less confusing
-     nuclrate_accum     = nuclrate_accum     / dt
-     nuclrate_accum_pbl = nuclrate_accum_pbl / dt
-     formrate_accum     = formrate_accum     / dt
-     formrate_accum_pbl = formrate_accum_pbl / dt
-     h2so4nucl          = h2so4nucl          / dt
-     growth_rate_h2so4  = growth_rate_h2so4  / dt
-     coag_sink_nucl     = coag_sink_nucl     / dt
+      nuclrate_accum     = nuclrate_accum     / dt
+      nuclrate_accum_pbl = nuclrate_accum_pbl / dt
+      formrate_accum     = formrate_accum     / dt
+      formrate_accum_pbl = formrate_accum_pbl / dt
+      h2so4nucl          = h2so4nucl          / dt
+      growth_rate_h2so4  = growth_rate_h2so4  / dt
+      coag_sink_nucl     = coag_sink_nucl     / dt
 
 ! TODO: add nucleation
 ! TODO: add ranges
@@ -400,12 +416,14 @@ contains
          end do
 
          do irange = 1, aero_props%nranges()
-            fldname = 'SO4_R'//trim(aero_props%range_name(irange))//'_condTend'
-            call outfld(fldname, coltend(:ncol, aero_state%aero_range_state(irange)%transport_ndx(sulfate_specprop_ndx)-imozart), pcols, lchnk)
+            fieldname = 'SO4_R'//trim(aero_props%range_name(irange))//'_condTend'
+            call outfld(fieldname, coltend(:ncol, aero_state%aero_range_state(irange)%transport_ndx(sulfate_specprop_ndx)-imozart), pcols, lchnk)
          end do
       end if
 
-      deallocate(bin_numconc_initial, bin_numconc)
+      deallocate(bin_numconc_initial, bin_numconc_new, bin_numconc_old)
+      deallocate(bin_condensation_fraction, rho_aerosol)
+      deallocate(bin_mmr_state, bin_mmr_initial)
 
    end subroutine advance_aero_condtend
 
@@ -416,7 +434,7 @@ contains
 ! aerosols used for parameterising the transfer of externally mixed
 ! aitken mode particles into an internal mixture.
 ! note the parameterisation for conversion of externally mixed particles
-!  used the h2so4 lifetime onto the particles, and not a given
+! used the h2so4 lifetime onto the particles, and not a given
 ! increase in particle radius. will be improved in future versions of the model
 ! added input for h2so4 and soa nucleation: soa_lv_gasprod, soa_sv_gasprod, pblh,zi,qh20 (cka)
 ! 1. calculate air density from pressure and temperature
@@ -429,20 +447,37 @@ contains
 ! 8. Adds newly formed particles to the smallest bin.
 !==========================================================================================
 
-   subroutine condtend_substep(lchnk,  q, cond_vap_gasprod, temperature,            &
+   subroutine condtend_substep(lchnk, q, cond_vap_gasprod, temperature,            &
                 nuclrate_accum, nuclrate_accum_pbl_o, formrate_accum, formrate_accum_pbl_o, coagnucl_o,  &
                 h2so4nucl_o, growth_rate_h2so4_o,                     &
                 coltend_o, split_dt,                                            &
-                pmid, pdel, dt, ncol, pblh,zm,qh20,                              &
-                aero_props, aero_state, bin_numconc_new, nuclnum_tend)
+                pmid, pdel, dt, ncol, pblh, zm, qh20,                              &
+                aero_props, aero_state, bin_numconc_new, nuclnum_tend, range_mmr_new, rho_air, bin_numconc_old, rho_aerosol, bin_condensation_fraction, bin_mmr_state)
 
       ! dummy arguments
       type(fanci_aerosol_properties), intent(in) :: aero_props
       type(fanci_aerosol_state), intent(in) :: aero_state
 
-      real(r8), intent(inout) :: bin_numconc_new(:,:,:)      ! [#/m3] number concentration new
+      real(r8), intent(in) :: rho_air(pcols,pver)   ! [kg/m3] density of air
+      real(r8), intent(in) :: cond_vap_gasprod(:,:) ! TMR [kg/kg/sec]] production rate of H2SO4 (gas prod - aq phase uptake)
+      real(r8), intent(in) :: dt                    ! Time step
+      ! Needed for soa nucleation treatment
+      real(r8), intent(in) :: pblh(pcols)           ! pbl height (m)
+      real(r8), intent(in) :: zm(:,:)               ! midlayer geopotential height above the surface (m) (pver+1)
+      real(r8), intent(in) :: qh20(:,:)             ! specific humidity (kg/kg)
+      ! arguments
+      integer,  intent(in)    :: lchnk                 ! chunk identifier
+      integer,  intent(in)    :: ncol                  ! number of columns
+      real(r8), intent(in)    :: temperature(:,:)      ! Temperature (K)
+      real(r8), intent(in)    :: pmid(:,:)             ! [Pa] pressure at mid point
+      real(r8), intent(in)    :: pdel(:,:)             ! [Pa] difference in grid cell
+      real(r8), intent(in)    :: rho_aerosol(:, :, :)
 
-       !++smb sectional
+      real(r8), intent(inout) :: bin_mmr_state(:,:,:)       ! mass in each bin (kg/kg_air)
+      real(r8), intent(inout) :: q(:,:,:)                   ! TMR [kg/kg] including moisture
+      real(r8), intent(inout) :: bin_numconc_new(:,:,:)     ! [#/m3] number concentration new
+      real(r8), intent(inout) :: range_mmr_new(:,:,:)       ! mass in each range after growth, summed over bins in a range (kg/kg_air)
+
       real(r8), intent(inout) :: nuclrate_accum (:,:)       ! Nucleation rate output
       real(r8), intent(inout) :: nuclrate_accum_pbl_o (:,:) ! Nucleation rate pbl output
       real(r8), intent(inout) :: formrate_accum(:,:)        ! Formation rate output
@@ -453,198 +488,130 @@ contains
       real(r8), intent(inout) :: growth_rate_h2so4_o(:,:)   ! GR from H2SO4 output
 
       real(r8), intent(out)   :: coltend_o(:,:)             ! column tendency output
-      logical,  intent(out)   :: split_dt                   ! if true, time step needs to be split
-
       real(r8), intent(out)   :: nuclnum_tend(:,:)          ! [#/m3/s] nucleation number rate from RM's parameterization
-       !--smb sectional
+      real(r8), intent(out)   :: bin_numconc_old(:,:,:)     ! [#/m3] number concentration old
+      real(r8), intent(out)   :: bin_condensation_fraction(:,:,:) ! [frc]
 
-      ! arguments
-      integer,  intent(in) :: lchnk                 ! chunk identifier
-      integer,  intent(in) :: ncol                  ! number of columns
-      real(r8), intent(in) :: temperature(:,:)      ! Temperature (K)
-      real(r8), intent(in) :: pmid(:,:)             ! [Pa] pressure at mid point
-      real(r8), intent(in) :: pdel(:,:)             ! [Pa] difference in grid cell
-      real(r8), intent(inout) :: q(:,:,:)           ! TMR [kg/kg] including moisture
-
-      real(r8), intent(in) :: cond_vap_gasprod(:,:) ! TMR [kg/kg/sec]] production rate of H2SO4 (gas prod - aq phase uptake)
-      real(r8), intent(in) :: dt                    ! Time step
-      ! Needed for soa nucleation treatment
-      real(r8), intent(in) :: pblh(pcols)        ! pbl height (m)
-      real(r8), intent(in) :: zm(:,:)            ! midlayer geopotential height above the surface (m) (pver+1)
-      real(r8), intent(in) :: qh20(:,:)          ! specific humidity (kg/kg)
+      logical,  intent(out)   :: split_dt                   ! if true, time step needs to be split
 
       ! local
       character(len=fieldname_len+3) :: fieldname
-      integer :: i,k
+      integer  :: i,k
       real(r8) :: condensation_sink_tot(pcols,pver)     ! [1/s] sum of condensation sink
       real(r8) :: totalLoss(pcols,pver,gas_pcnst)       ! [kg/kg] tracer lost
       real(r8) :: coltend(pcols, gas_pcnst)
       real(r8) :: tracer_coltend(pcols)
-      real(r8), allocatable :: bin_condensation_sink(:) ! [1/s] loss rate per mode (mixture)
-      real(r8), allocatable :: bin_condensation_fraction(:,:,:) ! [frc]
-      real(r8), allocatable :: bin_numconc_old(:,:,:)   ! [#/m3] number concentration
-      real(r8), allocatable :: tend(:,:,:)
+! TODO: remove "tend"?
+!      real(r8), allocatable :: tend(:,:,:)
 
-      real(r8)       :: h2so4_mmr_tmp(pcols,pver)       ! intermediate concentration for h2so4
-      real(r8)       :: rho_air(pcols,pver)             ! [kg/m3] density of air
+      real(r8)  :: h2so4_mmr_tmp(pcols,pver)       ! intermediate concentration for h2so4
       ! Volume of added  material from condensate;  surface area of core particle;
       ! TODO: add real(r8)       :: volume_shell, area_core,vol_monolayer
 
       ! needed for h2so4 and soa nucleation treatment
-       integer  :: modeIndexReceiverCoag                ! Index of modes receiving coagulate
-       integer  :: iCoagReceiver                        ! counter for species receiving coagulate
-       real(r8) :: coagulationSink(pcols,pver)          ! [1/s] coaglation loss for SO4_n and soa_n
-       real(r8), pointer :: tmp_num(:,:)                ! gets aerosol number mixing ratio through aero_state [#/kg_air]
-       real(r8) :: h2so4_mmr_loss(pcols,pver)           ! [kg/kg] budget terms on H2SO4 (gas)
-       real(r8) :: frac_loss_to_nucl(pcols,pver)        ! [frc] fraction of gas nucleated
-       real(r8) :: firstOrderLossRateNucl(pcols,pver)   ! [1/s] first order loss rate due to nucleation
-       real(r8) :: nuclso4_tend(pcols,pver)             ! [kg/kg/s] Nucleated so4 mass tendency from RM's parameterization
-       real(r8), allocatable :: rho_aerosol(:, :, :)
+      integer  :: iCoagReceiver                        ! counter for species receiving coagulate
+      real(r8) :: coagulationSink(pcols,pver)          ! [1/s] coaglation loss for SO4_n and soa_n
+      real(r8), pointer :: tmp_num(:,:)                ! gets aerosol number mixing ratio through aero_state [#/kg_air]
+      real(r8) :: h2so4_mmr_loss(pcols,pver)           ! [kg/kg] budget terms on H2SO4 (gas)
+      real(r8) :: frac_loss_to_nucl(pcols,pver)        ! [frc] fraction of gas nucleated
+      real(r8) :: firstOrderLossRateNucl(pcols,pver)   ! [1/s] first order loss rate due to nucleation
+      real(r8) :: nuclso4_tend(pcols,pver)             ! [kg/kg/s] Nucleated so4 mass tendency from RM's parameterization
        !smb++ sectional
-       real(r8) :: dummy  !
-       integer  :: ibin, irange ! indices
-       real(r8) :: q_mmr(pcols,pver,aero_props%nbins()) ! [kg/kg] mass in each tracer -> rename to bin_mmr
+      real(r8) :: dummy  !
+      integer  :: ibin, irange ! indices
+!       real(r8) :: bin_mmr(pcols,pver,aero_props%nbins())    ! [kg/kg] mass in each tracer/bin
+      real(r8) :: bin_mmr_before_growth(aero_props%nbins()) ! [kg/kg] mass in each tracer/bin before growth
+      real(r8) :: bin_mmr_after_growth(aero_props%nbins())  ! [kg/kg] mass in each tracer/bin after growth
+      logical  :: decrease_dt
 
        ! local variables for output
-       logical        :: history_aerosol
+      logical  :: history_aerosol
 !       character(128) :: long_name                     ! [-] needed for diagnostics
 
       !-----------------------------------------------------------------------------------
+! TODO: move allocates out of the substep routine
+!       allocate(tend(ncol, pver, gas_pcnst))
 
-       allocate(bin_condensation_sink(aero_props%nbins()))
-       allocate(bin_numconc(ncol,pver,aero_props%nbins()))
-       allocate(bin_condensation_fraction(ncol,pver,aero_props%nbins()))
-       allocate(rho_aerosol(ncol,pver,aero_props%nbins()))
-       allocate(tend(ncol, pver, gas_pcnst))
        !Initialize h2so4 and soa nucl variables
 ! TODO: coagulationSink is just 0 so far
-       coagulationSink = 0.0_r8
-       bin_condensation_fraction = 0.0_r8
-       bin_numconc_old = 0.0_r8
-       tmp_num => null()
-       coltend_o = 0.0_r8
-       split_dt       = .FALSE.
+      coagulationSink = 0.0_r8
+      bin_condensation_fraction = 0.0_r8
+      tmp_num => null()
+      coltend_o = 0.0_r8
+      split_dt       = .FALSE.
 
-       do k = 1, pver
-           do i = 1, ncol
-                !Air density
-                rho_air(i,k) = pmid(i,k)/rair/temperature(i,k)
-           end do
-        end do
+      bin_numconc_old = bin_numconc_new !* rho_air(:ncol,:)  ![#/m3] number concentration
 
-       do ibin = 1, aero_props%nbins()
-        ! No looping through species, mmr is added afterwards
-!          call aero_state%get_ambient_num(ibin, tmp_num)
-          bin_numconc_old(:ncol,:,ibin) = bin_numconc_new(:ncol, :, ibin) !* rho_air(:ncol,:)  ![#/m3] number concentration
-          rho_aerosol(:ncol,:,ibin) = aero_state%bin_dry_density(ibin, ncol)
-       enddo
+      do k=1,pver
+         do i=1,ncol
 
-       do k=1,pver
-           do i=1,ncol
+            !Initialize number concentration for this receiver
+            ! TODO: do we need this?
+            ! sum of cond. sink for this vapour [1/s]
+            condensation_sink_tot(i,k) = sum(condsink_per_particle(:) * bin_numconc_old(i,k,:))
 
-                !smb++ sectional
-                ! initialize condensation sink for sectional
-                bin_condensation_sink = 0.0_r8  !Sink to the coming "receiver" of any vapour
-                !smb-- sectional
+            ! Keeps track of the fraction of the condensate to the sectional bins for each tracer
+            bin_condensation_fraction(i,k,:) = condsink_per_particle(:) * bin_numconc_old(i,k,:) &
+                                                / (condensation_sink_tot(i,k) + 1.e-30_r8)      ![frc]
 
-                !NB: The following is duplicated code, coordinate with koagsub!!
-                !Initialize number concentration for this receiver
-
-
-                !Go though all bins receiving condensation
-
-                ! condensation sink to sectional bin:
-                   do ibin = 1, aero_props%nbins()
-
-                      !This is the loss rate a gas molecule will see due to aerosol surface area
-                      bin_condensation_sink(ibin)   = condsink_per_particle(ibin)  & ![m3/#/s]  per particle
-                                                          * bin_numconc_old(i,k,ibin)             ![#/m3]
-                                                          !==> [1/s]
-                   end do !Loop over receivers
-                !smb-- sectional
-
-                !Find concentration after condensation of all
-                !condenseable vapours
-                ! smb++ sectional edited:
-                ! condensation sink fraction that goes to each bin in sectional scheme
-                ! set to zero first:
-                ! smb-- sectional
-
-                    !sum of cond. sink for this vapour [1/s]
-                    !smb++ sectional
-                    ! Need to add condensation sink to sectional scheme for particles in sectional scheme
-                    ! However, not all tracers may contribute:
-                    ! assumes same order of gasses in sectional and other (1: H2SO4,2: SOA_LV, 3: SOA_SV)
-                        condensation_sink_tot(i,k) = sum(bin_condensation_sink( :))
-                        ! Keeps track of the fraction of the condensate to the sectional bins for each tracer
-                        bin_condensation_fraction(i,k,:) = bin_condensation_sink( :) &
-                                /(condensation_sink_tot(i,k)+1.e-30_r8)![frc]
-                    !smb-- sectional
-
-
-                !Solve the intermediate (end of timestep) concentration using
-                !euler backward solution C_{old} + P *dt - L*C_{new}*dt = C_{new} ==>
-                !Cnew -Cold = prod - loss ==>
-                h2so4_mmr_tmp(i,k) = &
-                                     ( q(i,k,l_h2so4_chem) + cond_vap_gasprod(i,k)*dt ) &
+            !Solve the intermediate (end of timestep) concentration using
+            !euler backward solution C_{old} + P *dt - L*C_{new}*dt = C_{new} ==>
+            !Cnew -Cold = prod - loss ==>
+            h2so4_mmr_tmp(i,k) = ( q(i,k,l_h2so4_chem) + cond_vap_gasprod(i,k)*dt ) &
                                      / (1.0_r8 + condensation_sink_tot(i,k)*dt)
 
+            ! TODO: add organics contribution to nucleation ORG_LV
 
-                ! TODO: add organics contribution to nucleation ORG_LV
+            ! ======================== End of condensation
 
-                modeIndexReceiverCoag = 0
-                !Sum coagulation sink for nucleated so4 and soa particles over all receivers of coagulate. Needed for RM's nucleation code
-                !OBS - looks like RM's coagulation sink is multiplied by 10^-12??
+            ! Sum coagulation sink for nucleated so4 and soa particles over all receivers of coagulate. Needed for RM's nucleation code
+            ! OBS - looks like RM's coagulation sink is multiplied by 10^-12??
+         end do !index i
+      end do !index k
 
-
-           end do !index i
-       end do !index k
-
-       !Calculate nucleated masses of so4 and soa (nuclso4_tend)
-       !following RM's parameterization (cka)
+      !Calculate nucleated masses of so4 and soa (nuclso4_tend)
+      !following RM's parameterization (cka)
 ! TODO: check, how is h2so4_mmr_tmp h2so4_mmr
-       call aerosol_nucleation(lchnk, ncol, temperature, pmid, qh20, h2so4_mmr_tmp(:,:), &
+      call aerosol_nucleation(lchnk, ncol, temperature, pmid, qh20, h2so4_mmr_tmp(:,:), &
                    coagulationSink, nuclnum_tend, nuclso4_tend, zm, pblh, &
                    nuclrate_accum, nuclrate_accum_pbl_o, formrate_accum, formrate_accum_pbl_o, &
                    h2so4nucl_o, growth_rate_h2so4_o, dt, &
-                   bin_centers(1), aero_props &
-                   )
+                   bin_centers(1), aero_props, &
+                   rho_air)
 
-       !smb++ sectional
-       coagnucl_o(:,:) = coagnucl_o(:,:) + coagulationSink(:,:)*dt
-       !smb-- sectional
-       firstOrderLossRateNucl = 0.0_r8
-       do k=1,pver
-          do i=1,ncol
+      coagnucl_o(:,:) = coagnucl_o(:,:) + coagulationSink(:,:)*dt
 
-             !First order loss rate (1/s) for nucleation
-              !smb++ added check for 0
-              if (h2so4_mmr_tmp(i,k) .eq. 0) then
-                ! If 0, we are not losing any H2SO4 to nucleation
-                  firstOrderLossRateNucl(i,k)=0._r8
-              else
-                  firstOrderLossRateNucl(i,k) = nuclso4_tend(i,k)/h2so4_mmr_tmp(i,k)
-              end if
+      firstOrderLossRateNucl = 0.0_r8
+      do k=1,pver
+         do i=1,ncol
+
+            ! First order loss rate (1/s) for nucleation
+            !smb++ added check for 0
+            if (h2so4_mmr_tmp(i,k) .eq. 0) then
+               ! If 0, we are not losing any H2SO4 to nucleation
+               firstOrderLossRateNucl(i,k)=0._r8
+            else
+               firstOrderLossRateNucl(i,k) = nuclso4_tend(i,k)/h2so4_mmr_tmp(i,k)
+            end if
 ! organics here
-              !smb-- added check for 0
-             !First order loss rate (1/s) for nucleation
+            !First order loss rate (1/s) for nucleation
 
-                !Solve implicitly (again)
-                !C_new - C_old =  PROD_{gas} - CS*C_new*dt - LR_{nucl}*C_new =>
-                h2so4_mmr_tmp(i,k) = &
+            !Solve implicitly (again)
+            !C_new - C_old =  PROD_{gas} - CS*C_new*dt - LR_{nucl}*C_new =>
+            h2so4_mmr_tmp(i,k) = &
                                ( q(i,k,l_h2so4_chem) + cond_vap_gasprod(i,k)*dt ) &
                                / (1.0_r8 + condensation_sink_tot(i,k)*dt + firstOrderLossRateNucl(i,k)*dt)
 
-                !fraction nucleated
-                frac_loss_to_nucl(i,k) = firstOrderLossRateNucl(i,k) &
+            !fraction nucleated
+            frac_loss_to_nucl(i,k) = firstOrderLossRateNucl(i,k) &
                                      /(firstOrderLossRateNucl(i,k) + condensation_sink_tot(i,k))
-               !From budget, we get: lost = prod -cnew + cold
-                h2so4_mmr_loss(i,k) = cond_vap_gasprod(i,k)*dt   & !Produced
+            !From budget, we get: lost = prod -cnew + cold
+            h2so4_mmr_loss(i,k) = cond_vap_gasprod(i,k)*dt   & !Produced
                                      + q(i,k,l_h2so4_chem)            & !cold
                                      - h2so4_mmr_tmp(i,k)    !cnew
 
-             !H2SO4 condensate
-             do ibin=1, aero_props%nbins()
+            !H2SO4 condensate
+            do ibin=1, aero_props%nbins()
                 ! bin_numconc_old (#/m3)
                 ! h2so4_mmr_loss: [kg/kg] mass lost from gas phase
                 ! bin_condensation_fraction: [frc] fraction to the particular bin
@@ -654,7 +621,7 @@ contains
 ! TODO: condensation does not change the number!! -> add mass to ranges
 !                bin_numconc_old(i, k, ibin) = bin_numconc_old(i, k, ibin) + h2so4_mmr_loss(i,k) * (1._r8-frac_loss_to_nucl(i,k)) * bin_condensation_fraction(i,k, ibin) / aero_props%density(sulfate_specprop_ndx) / aero_props%particle_volume(ibin)
 !                call aero_state%update_bin(ibin, i, k, 0._r8, -1._r8*h2so4_mmr_loss(i,k) * (1._r8-frac_loss_to_nucl(i,k)) * bin_condensation_fraction(i,k, ibin) / aero_props%density(sulfate_specprop_ndx) / aero_props%particle_volume(ibin), 0, dt, tend)
-                irange = aero_props%bins2ranges(ibin)
+               irange = aero_props%bins2ranges(ibin)
 
 !                ispec = ??
                 ! add mass to the range:
@@ -662,32 +629,42 @@ contains
 !                     + h2so4_mmr_loss(i,k)*(1.0_r8-frac_loss_to_nucl(i,k)) &
 !                     *bin_condensation_fraction(i,k, ibin)
 
-             end do
+            end do
 
-             !condenseable vapours
-             q(i,k,l_h2so4_chem)  = h2so4_mmr_tmp(i,k)
+             ! condenseable vapours
+            q(i,k,l_h2so4_chem)  = h2so4_mmr_tmp(i,k)
 
              !smb++sectional grow particles in sectional scheme:
     ! removed median radius because not used
-             do ibin=1, aero_props%nbins()
-                 ! get mmr for sulfate per bin?
+ !           do ibin=1, aero_props%nbins()
+                ! get mmr for sulfate per bin?
 ! TODO: use chem_ndx or whatever
-                 q_mmr(i,k,ibin) = q(i,k,XXX) * aero_props%particle_volume(ibin) * rho_aerosol(i, k, ibin)    ! [kg/kg] mass in each tracer
-             end do
+!                bin_mmr(i,k,ibin) = q(i,k,XXX) * aero_props%particle_volume(ibin) * rho_aerosol(i, k, ibin)    ! [kg/kg] mass in each tracer
+ !           end do
 
-             call move_mass_and_number(q_mmr(i,k,:), bin_numconc_old(i,k,:), &
-                            rho_air(i,k), split_dt, aero_props, rho_aerosol(i, k,:), q_mmr_new(i,k,:), bin_numconc_new(i, k,:))
+            bin_mmr_before_growth = bin_mmr_state(i,k,:)
+
+
+            call move_mass_and_number(bin_mmr(i,k,:), bin_numconc_old(i,k,:), &
+                                       rho_air(i,k), split_dt, aero_props, &
+                                       rho_aerosol(i, k,:), bin_mmr_new(i,k,:), &
+                                       bin_numconc_new(i, k,:), range_mmr_new(i,k,:))
+
+            if (decrease_dt) then
+                split_dt = .true.
+                return
+             end if
+
              ! Add nucleated number to smallest bin after redistribution (#/kg/s * s = #/kg)
              bin_numconc_new(i, k, 1) = bin_numconc_new(i, k, 1) + nuclnum_tend(i,k) * dt
              ! Add nucleated mass to first bin of sectional scheme:
  !            q(i,k,chemistryIndex(secConstIndex(1,1))) =  q(i,k,chemistryIndex(secConstIndex(1,1)))       &
  !                        + h2so4_mmr_loss(i,k)*frac_loss_to_nucl(i,k)
 
-            ! Add mass from sectional scheme to so4_na and soa_na:
+             ! Add mass from sectional scheme to so4_na and soa_na:
 !             q(i,k,chemistryIndex(l_so4_na)) = q(i,k,chemistryIndex(l_so4_na))
 
              !smb--sectional
-
           end do !physical index k
        end do    !physical index i
 
@@ -750,43 +727,44 @@ contains
 !==========================================================================================
 
    subroutine move_mass_and_number(bin_mmr_old, bin_numconc_old, rho_air, decrease_dt, aero_props, &
-                                     rho_aerosol, bin_mmr_new, bin_numconc_new)
+                                     rho_aerosol, bin_mmr_new, bin_numconc_new, range_mmr_new)
 
-    ! bin_mmr: mass in each tracer (kg_aer/kg_air) after growth
-    ! Moves tracer mass from on bin to the other based on condensational/coagulation growth.
-    ! Based on Jacobson Fundamentals of Atmospheric Modeling, second edition (2005),
-    ! Chapter   13.5
-    class(fanci_aerosol_properties), intent(in) :: aero_props
+      ! bin_mmr: mass in each tracer (kg_aer/kg_air) after growth
+      ! Moves tracer mass from on bin to the other based on condensational/coagulation growth.
+      ! Based on Jacobson Fundamentals of Atmospheric Modeling, second edition (2005),
+      ! Chapter   13.5
+      class(fanci_aerosol_properties), intent(in) :: aero_props
 
-    ! inputs
-    real(r8), intent(in)    :: bin_mmr_old(:)        ! mass in each tracer after growth, per bin (kg_aerosol/kg_air)
-    real(r8), intent(in)    :: bin_numconc_old(:)    ! number concentration, after growth, before redistribution (particles/m^3)
-    real(r8), intent(in)    :: rho_aerosol(:)        ! Density of particle (kg_aerosol/m3_aerosol)
-    real(r8), intent(in)    :: rho_air               ! Density of air (kg_air/m3_air)
+      ! inputs
+      real(r8), intent(in)  :: bin_mmr_old(:)        ! mass in each tracer after growth, per bin (kg_aerosol/kg_air)
+      real(r8), intent(in)  :: bin_numconc_old(:)    ! number concentration, after growth, before redistribution (particles/m^3)
+      real(r8), intent(in)  :: rho_aerosol(:)        ! Density of particle (kg_aerosol/m3_aerosol)
+      real(r8), intent(in)  :: rho_air               ! Density of air (kg_air/m3_air)
 
-    ! outputs
-    real(r8), intent(out)   :: bin_mmr_new(:)        ! mass in each tracer after growth, per bin (kg/kg_air)
-    real(r8), intent(out)   :: bin_numconc_new(:)    ! output particle concentrations, after growth
-    logical,  intent(out)   :: decrease_dt           ! if set to True, time step is divided
+      ! outputs
+      real(r8), intent(out) :: bin_mmr_new(:)        ! mass in each bin/species after growth, needs to be summed up for ranges (kg/kg_air)
+      real(r8), intent(out) :: range_mmr_new(:)      ! mass in each range after growth, needs to be summed from bins (kg/kg_air)
+      real(r8), intent(out) :: bin_numconc_new(:)    ! output particle concentrations, after growth
+      logical,  intent(out) :: decrease_dt           ! if set to True, time step is divided
                                                      ! and the procedure is re run
-    ! local variables
-    real(r8)                :: particle_volume_grown ! volume after growth dimension(secNrBins)
-    real(r8)                :: fraction_remaining    ! fraction to stay in bin
-    integer                 :: ibin
-    !-----------------------------------------------------------------------------------
+      ! local variables
+      real(r8)              :: particle_volume_grown ! volume after growth dimension(secNrBins)
+      real(r8)              :: fraction_remaining    ! fraction to stay in bin
+      integer               :: ibin, irange
+      !-----------------------------------------------------------------------------------
 
-    ! initialize
-    bin_mmr_new(:) = 0._r8
-    bin_numconc_new(:) = 0._r8
-    decrease_dt=.FALSE.
+      ! initialize
+      bin_mmr_new(:) = 0._r8
+      bin_numconc_new(:) = 0._r8
+      decrease_dt=.FALSE.
 
-    !compute volume in each bin with condensation (by mass) and by number concentration
-    do ibin = 1, aero_props%nbins() - 1
-        particle_volume_grown = 0._r8
+      !compute volume in each bin with condensation (by mass) and by number concentration
+      do ibin = 1, aero_props%nbins() - 1
+         particle_volume_grown = 0._r8
 
-        if (bin_numconc_old(ibin)<1.e-30_r8) then
+         if (bin_numconc_old(ibin)<1.e-30_r8) then
             fraction_remaining = 1.0_r8
-        else
+         else
             ! volume of single particle after growth
             particle_volume_grown = bin_mmr_old(ibin) * rho_air / rho_aerosol(ibin) &
                          / bin_numconc_old(ibin)
@@ -803,20 +781,26 @@ contains
 
 
             fraction_remaining=max(0._r8, min(1._r8,fraction_remaining))
-        end if
+         end if
 
-        ! Calculate new number concentrations and mass mixing ratios
-        bin_numconc_new(ibin)     = bin_numconc_new(ibin)     + fraction_remaining * bin_numconc_old(ibin)
-        bin_numconc_new(ibin + 1) = bin_numconc_new(ibin + 1) + (1._r8 - fraction_remaining) * bin_numconc_old(ibin)
+         ! Calculate new number concentrations and mass mixing ratios
+         bin_numconc_new(ibin)     = bin_numconc_new(ibin)     + fraction_remaining * bin_numconc_old(ibin)
+         bin_numconc_new(ibin + 1) = bin_numconc_new(ibin + 1) + (1._r8 - fraction_remaining) * bin_numconc_old(ibin)
 
-        bin_mmr_new(ibin)     = bin_mmr_new(ibin)     + fraction_remaining * bin_mmr_old(ibin)
-        bin_mmr_new(ibin + 1) = bin_mmr_new(ibin + 1) + (1._r8 - fraction_remaining) * bin_mmr_old(ibin)
-    end do
+         bin_mmr_new(ibin)     = bin_mmr_new(ibin)     + fraction_remaining * bin_mmr_old(ibin)
+         bin_mmr_new(ibin + 1) = bin_mmr_new(ibin + 1) + (1._r8 - fraction_remaining) * bin_mmr_old(ibin)
+      end do
 
-    ! Aerosol cannot leave the largest bin -> keep it in there
-    ibin = aero_props%nbins()
-    bin_numconc_new(ibin) = bin_numconc_new(ibin) + bin_numconc_old(ibin)
-    bin_mmr_new(ibin) = bin_mmr_new(ibin) + bin_mmr_old(ibin)
+      ! Aerosol cannot leave the largest bin -> keep it in there
+      ibin = aero_props%nbins()
+      bin_numconc_new(ibin) = bin_numconc_new(ibin) + bin_numconc_old(ibin)
+      bin_mmr_new(ibin) = bin_mmr_new(ibin) + bin_mmr_old(ibin)
+
+      range_mmr_new = 0._r8
+      do ibin = 1, aero_props%nbins()
+         irange = aero_props%bins2ranges(ibin)
+         range_mmr_new(irange) = range_mmr_new(irange) + bin_mmr_new(ibin)
+      end do
 
    end subroutine move_mass_and_number
 
@@ -828,105 +812,101 @@ contains
                 coag_sink_nucl, nuclnum_tend, nuclso4_tend, zm, pblht, &
                 nuclrate_accum, nuclrate_accum_pbl_o, formrate_accum, formrate_accum_pbl_o,  &
                 h2so4nucl_o, growth_rate_h2so4_o, dt, &
-                target_particle_radius, aero_props)
+                target_particle_radius, aero_props, rho_air)
 
-    use wv_saturation,  only: qsat_water
-    use m_spc_id,       only: id_H2SO4
-    use shr_const_mod,  only: shr_const_rgas
+      use wv_saturation,  only: qsat_water
+      use m_spc_id,       only: id_H2SO4
+      use shr_const_mod,  only: shr_const_rgas
 
-    !-- Arguments
-    class(fanci_aerosol_properties), intent(in) :: aero_props
+      !-- Arguments
+      class(fanci_aerosol_properties), intent(in) :: aero_props
 
-    real(r8), intent(in)    :: dt                        ! timestep (output is weighted by this)
-    integer,  intent(in)    :: lchnk                     ! chunk identifier
-    integer,  intent(in)    :: ncol                      ! number of atmospheric column
-    real(r8), intent(in)    :: pmid(pcols,pver)          ! layer pressure (Pa)
-    real(r8), intent(in)    :: h2ommr(:,:)               ! layer specific humidity
-    real(r8), intent(in)    :: t(:,:)                    ! Temperature (K)
-    real(r8), intent(in)    :: h2so4_mmr(:,:)            ! Sulphuric acid (gas) mass mixing ratio (kg kg-1)
-    real(r8), intent(in)    :: coag_sink_nucl(:,:)       ! Coagulation sink for nucleating particles [1/s]
+      real(r8), intent(in)    :: dt                        ! timestep (output is weighted by this)
+      integer,  intent(in)    :: lchnk                     ! chunk identifier
+      integer,  intent(in)    :: ncol                      ! number of atmospheric column
+      real(r8), intent(in)    :: pmid(pcols,pver)          ! layer pressure (Pa)
+      real(r8), intent(in)    :: h2ommr(:,:)               ! layer specific humidity
+      real(r8), intent(in)    :: t(:,:)                    ! Temperature (K)
+      real(r8), intent(in)    :: h2so4_mmr(:,:)            ! Sulphuric acid (gas) mass mixing ratio (kg kg-1)
+      real(r8), intent(in)    :: coag_sink_nucl(:,:)       ! Coagulation sink for nucleating particles [1/s]
 
-    real(r8), intent(in)    :: zm(:,:)                   ! Height at layer midpoints (m)
-    real(r8), intent(in)    :: pblht(:)                  ! Planetary boundary layer height (m)
-    real(r8), intent(in)    :: target_particle_radius    ! Particle size at calculated formation rate [m]
+      real(r8), intent(in)    :: zm(:,:)                   ! Height at layer midpoints (m)
+      real(r8), intent(in)    :: pblht(:)                  ! Planetary boundary layer height (m)
+      real(r8), intent(in)    :: target_particle_radius    ! Particle size at calculated formation rate [m]
+      real(r8), intent(in)    :: rho_air(:,:)              ! density of air [kg/m3]
+      ! because the timestep may be divided in two, the output needs to be averaged over all timesteps
+      ! therefore we track this in these variables
+      real(r8), intent(inout) :: nuclrate_accum(:,:)       ! Nucleation rate output
+      real(r8), intent(inout) :: nuclrate_accum_pbl_o(:,:) ! Nucleation in pbl rate output
+      real(r8), intent(inout) :: formrate_accum(:,:)       ! formation rate output
+      real(r8), intent(inout) :: formrate_accum_pbl_o(:,:) ! formation rate in pbl output
 
-    ! because the timestep may be divided in two, the output needs to be averaged over all timesteps
-    ! therefore we track this in these variables
-    real(r8), intent(inout) :: nuclrate_accum(:,:)       ! Nucleation rate output
-    real(r8), intent(inout) :: nuclrate_accum_pbl_o(:,:) ! Nucleation in pbl rate output
-    real(r8), intent(inout) :: formrate_accum(:,:)       ! formation rate output
-    real(r8), intent(inout) :: formrate_accum_pbl_o(:,:) ! formation rate in pbl output
-
-    real(r8), intent(inout) :: h2so4nucl_o(:,:)          ! conc h2so4 for output
-    real(r8), intent(inout) :: growth_rate_h2so4_o(:,:)  ! GR from H2SO4 for output
-    !smb-- sectional
-    real(r8), intent(out)   :: nuclso4_tend(:,:)         ! Nucleated mass (H2SO4)
-    real(r8), intent(out)   :: nuclnum_tend(:,:)         ! [#/m3/s] Nucleated mass (SO4)
+      real(r8), intent(inout) :: h2so4nucl_o(:,:)          ! conc h2so4 for output
+      real(r8), intent(inout) :: growth_rate_h2so4_o(:,:)  ! GR from H2SO4 for output
+      real(r8), intent(out)   :: nuclso4_tend(:,:)         ! Nucleated mass (H2SO4)
+      real(r8), intent(out)   :: nuclnum_tend(:,:)         ! [#/m3/s] Nucleated mass (SO4)
 
 ! TODO: implement oxidorg, orgnucl_o, grsoa_o, nuclorg when adding organics
 
-    !-- Local variables
-    ! TODO: is there a way to not hard code the H2SO4 density?
-    real(r8), parameter   :: h2so4_dens=1841._r8            ! h2so4 density [kg m-3]
+      !-- Local variables
+      ! TODO: is there a way to not hard code the H2SO4 density?
+      real(r8), parameter :: h2so4_dens=1841._r8            ! h2so4 density [kg m-3]
 
-    integer               :: i,k
-    real(r8)              :: qs(pcols,pver)                 ! Saturation specific humidity
-    real(r8)              :: relhum(pcols,pver)             ! Relative humidity
-    real(r8)              :: h2so4_num_cm3(pcols,pver)      ! Sulphuric acid concentration [#/cm3]
-    real(r8)              :: nucleated_volume(pcols,pver)   ! [m3/m3/s] Nucleated mass (SO4)
-    real(r8)              :: rho_air(pcols,pver)            ! density of air [kg/m3] !cka
-    real(r8)              :: pblht_lim(pcols)               ! Planetary boundary layer height (m) (500m<pblht_lim<7000m) (cka)
+      integer             :: i,k
+      real(r8)            :: qs(pcols,pver)                 ! Saturation specific humidity
+      real(r8)            :: relhum(pcols,pver)             ! Relative humidity
+      real(r8)            :: h2so4_num_cm3(pcols,pver)      ! Sulphuric acid concentration [#/cm3]
+      real(r8)            :: nucleated_volume(pcols,pver)   ! [m3/m3/s] Nucleated mass (SO4)
+      real(r8)            :: pblht_lim(pcols)               ! Planetary boundary layer height (m) (500m<pblht_lim<7000m) (cka)
 
-    real(r8)              :: nuclrate_accum_bin(pcols,pver) ! Binary nucleation rate (# cm-3 s-1)
-    real(r8)              :: formrate_accum_bin(pcols,pver) ! Binary formation rate (12 nm) (# cm-3 s-1)
-    real(r8)              :: nuclsize_bin(pcols,pver)       ! Binary nucleation critical cluster size (m)
-    real(r8)              :: nuclrate_accum_pbl(pcols,pver) ! Boundary layer nucleation rate (# cm-3 s-1)
-    real(r8)              :: formrate_accum_pbl(pcols,pver) ! Boundary layer formation rate (12 nm) (# cm-3 s-1)
-    real(r8)              :: nuclsize_pbl(pcols,pver)       ! Boundary layer nucleation formation size (m)
+      real(r8)            :: nuclrate_accum_bin(pcols,pver) ! Binary nucleation rate (# cm-3 s-1)
+      real(r8)            :: formrate_accum_bin(pcols,pver) ! Binary formation rate (12 nm) (# cm-3 s-1)
+      real(r8)            :: nuclsize_bin(pcols,pver)       ! Binary nucleation critical cluster size (m)
+      real(r8)            :: nuclrate_accum_pbl(pcols,pver) ! Boundary layer nucleation rate (# cm-3 s-1)
+      real(r8)            :: formrate_accum_pbl(pcols,pver) ! Boundary layer formation rate (12 nm) (# cm-3 s-1)
+      real(r8)            :: nuclsize_pbl(pcols,pver)       ! Boundary layer nucleation formation size (m)
 
 ! TODO: introduce orgforgrowth again, when implementing organics
-    real(r8)              :: gr(pcols,pver), growth_rate_h2so4(pcols,pver) !growth rates
-    real(r8)              :: vmolh2so4                      ! [m/s] molecular speed of condenseable gases
-    real(r8)              :: frach2so4
-    real(r8)              :: dummy
+      real(r8)            :: gr(pcols,pver), growth_rate_h2so4(pcols,pver) !growth rates
+      real(r8)            :: vmolh2so4                      ! [m/s] molecular speed of condenseable gases
+      real(r8)            :: frach2so4
+      real(r8)            :: dummy
 
-    integer               :: atm_nucleation                 ! Nucleation parameterization for the whole atmosphere
-    integer               :: pbl_nucleation                 ! Nucleation parameterization for the boundary layer
-    real(r8)              :: molmass_h2so4                  ! molecular mass of h2so4 [g/mol]
+      integer             :: atm_nucleation                 ! Nucleation parameterization for the whole atmosphere
+      integer             :: pbl_nucleation                 ! Nucleation parameterization for the boundary layer
+      real(r8)            :: molmass_h2so4                  ! molecular mass of h2so4 [g/mol]
 !TODO: fix this l_so4_na -> use aerosol tracers from state
- !   integer               :: l_so4_na
-   ! Variables for binary nucleation parameterization
-    real(r8)              :: zrhoa, zrh, zt, zt2, zt3, zlogrh, zlogrh2, zlogrh3, zlogrhoa, zlogrhoa2, zlogrhoa3, x, zxmole, zix
-    real(r8)              :: zjnuc, zntot, zrc, zrxc
+      !integer               :: l_so4_na
+      ! Variables for binary nucleation parameterization
+      real(r8)            :: zrhoa, zrh, zt, zt2, zt3, zlogrh, zlogrh2, zlogrh3, zlogrhoa, zlogrhoa2, zlogrhoa3, x, zxmole, zix
+      real(r8)            :: zjnuc, zntot, zrc, zrxc
 
-    !-----------------------------------------------------------------------------------
+      !-----------------------------------------------------------------------------------
 
-   !cka: OBS    call phys_getopts(pbl_nucleation_out=pbl_nucleation, atm_nucleation_out=atm_nucleation)
-    !cka: testing by setting these flags:
-    pbl_nucleation = 1 ! smb++ 3 use Riccobono 2014 for nucleation. -> cvb++ use 2, because we don't currently have organics
-    atm_nucleation = 1
+      !cka: OBS    call phys_getopts(pbl_nucleation_out=pbl_nucleation, atm_nucleation_out=atm_nucleation)
+      !cka: testing by setting these flags:
+      pbl_nucleation = 1 ! smb++ 3 use Riccobono 2014 for nucleation. -> cvb++ use 1, because we don't currently have organics
+      atm_nucleation = 1
 
-    nuclso4_tend(:,:) = 0._r8
+      nuclso4_tend(:,:) = 0._r8
 
-    !-- The highest level in planetary boundary layer
-    do i=1,ncol
-        pblht_lim(i) = MIN( MAX( pblht(i), 500._r8), 7000._r8 )
-    end do
+      !-- The highest level in planetary boundary layer
+      do i=1,ncol
+         pblht_lim(i) = MIN( MAX( pblht(i), 500._r8), 7000._r8 )
+      end do
 
-    !-- Get molecular mass of h2so4 and soa_lv (cka)
-    molmass_h2so4 = adv_mass(id_H2SO4)
+      !-- Get molecular mass of h2so4 and soa_lv (cka)
+      molmass_h2so4 = adv_mass(id_H2SO4)
 
 ! TODO: make this something sensible:
-  !  l_so4_na = 1
+      !l_so4_na = 1
 
-    !-- Formation diameters (m). Nucleated particles are inserted to SO4(n), same size used for soa  (cka)
+      !-- Formation diameters (m). Nucleated particles are inserted to SO4(n), same size used for soa  (cka)
 
-    !-- Conversion of H2SO4 from kg/kg to #/cm3
-    !-- and calculation of relative humidity (needed by binary nucleation parameterization)
-    do k=1,pver
-        do i=1,ncol
-            ! air density
-            rho_air(i,k) = pmid(i,k) / ( t(i,k) * rair )
+      !-- Conversion of H2SO4 from kg/kg to #/cm3
+      !-- and calculation of relative humidity (needed by binary nucleation parameterization)
+      do k=1,pver
+         do i=1,ncol
             !avogad*1.e-3_r8 to get molec/mol instead of molec/kmol for h2so4 gas
             h2so4_num_cm3(i,k) = ( 1.e-6_r8 * h2so4_mmr(i,k) * avogad * 1.e-3_r8 * rho_air(i,k) ) / ( molmass_h2so4 * 1.E-3_r8 )
 
@@ -935,55 +915,55 @@ contains
             relhum(i,k) = h2ommr(i,k)/qs(i,k)
             relhum(i,k) = max(relhum(i,k),0.0_r8)
             relhum(i,k) = min(relhum(i,k),1.0_r8)
-        end do !ncol
-    end do     !layers
+         end do !ncol
+      end do     !layers
 
 
-    !-- Binary sulphuric acid-water nucleation rate
-    if(atm_nucleation .EQ. 1) then
-        do k=1,pver
+      !-- Binary sulphuric acid-water nucleation rate
+      if(atm_nucleation .EQ. 1) then
+         do k=1,pver
             do i=1,ncol
 
-                ! Calculate nucleation only for valid thermodynamic conditions:
-                zrhoa = max(h2so4_num_cm3(i,k),1.E+4_r8)
-                zrhoa = min(zrhoa,1.E11_r8)
+               ! Calculate nucleation only for valid thermodynamic conditions:
+               zrhoa = max(h2so4_num_cm3(i,k),1.E+4_r8)
+               zrhoa = min(zrhoa,1.E11_r8)
 
-                zrh   = max(relhum(i,k),1.E-4_r8)
-                zrh   = min(zrh,1.0_r8)
+               zrh   = max(relhum(i,k),1.E-4_r8)
+               zrh   = min(zrh,1.0_r8)
 
-                zt    = max(t(i,k),190.15_r8)
-                zt    = min(zt,300.15_r8)
+               zt    = max(t(i,k),190.15_r8)
+               zt    = min(zt,300.15_r8)
 
-                zt2 = zt*zt
-                zt3 = zt2*zt
+               zt2 = zt*zt
+               zt3 = zt2*zt
 
-                ! Equation (11) - molefraction of H2SO4 in the critical cluster
+               ! Equation (11) - molefraction of H2SO4 in the critical cluster
 
-                zlogrh  = LOG(zrh)
-                zlogrh2 = zlogrh*zlogrh
-                zlogrh3 = zlogrh2*zlogrh
+               zlogrh  = LOG(zrh)
+               zlogrh2 = zlogrh*zlogrh
+               zlogrh3 = zlogrh2*zlogrh
 
-                zlogrhoa  = LOG(zrhoa)
-                zlogrhoa2 = zlogrhoa*zlogrhoa
-                zlogrhoa3 = zlogrhoa2*zlogrhoa
+               zlogrhoa  = LOG(zrhoa)
+               zlogrhoa2 = zlogrhoa*zlogrhoa
+               zlogrhoa3 = zlogrhoa2*zlogrhoa
 
-                x=0.7409967177282139_r8 - 0.002663785665140117_r8*zt   &
-                + 0.002010478847383187_r8*zlogrh    &
-                - 0.0001832894131464668_r8*zt*zlogrh    &
-                + 0.001574072538464286_r8*zlogrh2        &
-                - 0.00001790589121766952_r8*zt*zlogrh2    &
-                + 0.0001844027436573778_r8*zlogrh3     &
-                -  1.503452308794887e-6_r8*zt*zlogrh3    &
-                - 0.003499978417957668_r8*zlogrhoa   &
-                + 0.0000504021689382576_r8*zt*zlogrhoa
+               x=0.7409967177282139_r8 - 0.002663785665140117_r8*zt   &
+               + 0.002010478847383187_r8*zlogrh    &
+               - 0.0001832894131464668_r8*zt*zlogrh    &
+               + 0.001574072538464286_r8*zlogrh2        &
+               - 0.00001790589121766952_r8*zt*zlogrh2    &
+               + 0.0001844027436573778_r8*zlogrh3     &
+               -  1.503452308794887e-6_r8*zt*zlogrh3    &
+               - 0.003499978417957668_r8*zlogrhoa   &
+               + 0.0000504021689382576_r8*zt*zlogrhoa
 
-                zxmole=x
+               zxmole=x
 
-                zix = 1.0_r8/x
+               zix = 1.0_r8/x
 
-                ! Equation (12) - nucleation rate in 1/cm3s
+               ! Equation (12) - nucleation rate in 1/cm3s
 
-                zjnuc=0.1430901615568665_r8 + 2.219563673425199_r8*zt -   &
+               zjnuc=0.1430901615568665_r8 + 2.219563673425199_r8*zt -   &
                   0.02739106114964264_r8*zt2 +     &
                   0.00007228107239317088_r8*zt3 + 5.91822263375044_r8*zix +     &
                   0.1174886643003278_r8*zlogrh + 0.4625315047693772_r8*zt*zlogrh -     &
@@ -1031,11 +1011,11 @@ contains
                   5.004267665960894e-9_r8*zt3*zlogrhoa3 -    &
                   (0.01270805101481648_r8*zlogrhoa3)*zix
 
-                zjnuc=EXP(zjnuc)      !   add. Eq. (12) [1/(cm^3s)]
+               zjnuc=EXP(zjnuc)      !   add. Eq. (12) [1/(cm^3s)]
 
-                ! Equation (13) - total number of molecules in the critical cluster
+               ! Equation (13) - total number of molecules in the critical cluster
 
-                zntot=-0.002954125078716302_r8 - 0.0976834264241286_r8*zt +   &
+               zntot=-0.002954125078716302_r8 - 0.0976834264241286_r8*zt +   &
                   0.001024847927067835_r8*zt2 - 2.186459697726116e-6_r8*zt3 -    &
                   0.1017165718716887_r8*zix - 0.002050640345231486_r8*zlogrh -   &
                   0.007585041382707174_r8*zt*zlogrh +    &
@@ -1083,41 +1063,41 @@ contains
                   1.421771723004557e-11_r8*zt3*zlogrhoa3 +   &
                   (0.0001357509859501723_r8*zlogrhoa3)*zix
 
-                zntot=EXP(zntot)  !  add. Eq. (13)
+               zntot=EXP(zntot)  !  add. Eq. (13)
 
-                ! Equation (14) - radius of the critical cluster in nm
+               ! Equation (14) - radius of the critical cluster in nm
 
-                zrc=EXP(-1.6524245_r8+0.42316402_r8*x+0.33466487_r8*LOG(zntot))    ! [nm]
+               zrc=EXP(-1.6524245_r8+0.42316402_r8*x+0.33466487_r8*LOG(zntot))    ! [nm]
 
-                !----1.2) Limiter
+               !----1.2) Limiter
 
-                IF(zjnuc<1.e-7_r8 .OR. zntot<4.0_r8) zjnuc=0.0_r8
+               IF(zjnuc<1.e-7_r8 .OR. zntot<4.0_r8) zjnuc=0.0_r8
 
-                ! limitation to 1E+10 [1/cm3/s]
+               ! limitation to 1E+10 [1/cm3/s]
 
-                nuclrate_accum_bin(i,k)=MAX(MIN(zjnuc,1.E10_r8),0._r8)
-                nuclsize_bin(i,k)=MAX(MIN(zrc,1.E2_r8),0.01_r8)
+               nuclrate_accum_bin(i,k)=MAX(MIN(zjnuc,1.E10_r8),0._r8)
+               nuclsize_bin(i,k)=MAX(MIN(zrc,1.E2_r8),0.01_r8)
 
             end do
-        end do
-    else   !No atmospheric nucleation
-        nuclrate_accum_bin(:,:)=0._r8
-        nuclsize_bin(:,:)=1._r8
-    end if
+         end do
+      else   !No atmospheric nucleation
+         nuclrate_accum_bin(:,:)=0._r8
+         nuclsize_bin(:,:)=1._r8
+      end if
 
-    !-- Boundary layer nucleation
-    do k=1,pver
-        do i=1,ncol
+      !-- Boundary layer nucleation
+      do k=1,pver
+         do i=1,ncol
 
             !-- Nucleation rate #/cm3/s
             if(pblht_lim(i)>zm(i,k) .AND. pbl_nucleation>0) then
 
-                if(pbl_nucleation .EQ. 1) then
+               if(pbl_nucleation .EQ. 1) then
 
-                    !-- Paasonen et al. (2010), eqn 10, Table 4
-                    nuclrate_accum_pbl(i,k)=(1.7E-6_r8)*h2so4_num_cm3(i,k)
-                ! TODO: introduce other schemes when organics are available
-                end if
+                  !-- Paasonen et al. (2010), eqn 10, Table 4
+                  nuclrate_accum_pbl(i,k)=(1.7E-6_r8)*h2so4_num_cm3(i,k)
+                  ! TODO: introduce other schemes when organics are available
+               end if
 
                nuclrate_accum_pbl(i,k)=MAX(MIN(nuclrate_accum_pbl(i,k),1.E10_r8),0._r8)
 
@@ -1129,7 +1109,6 @@ contains
 
          end do !horizontal points
       end do     !levels
-
 
       !-- Calculate total nucleated mass
       do k=1,pver
